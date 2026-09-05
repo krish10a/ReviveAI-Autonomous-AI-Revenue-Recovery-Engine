@@ -103,20 +103,20 @@ def startup_event():
     try:
         with engine.connect() as conn:
             conn.execute(text("SELECT 1;"))
-        logger.info("PostgreSQL database connection verified.")
+        logger.info("Database connection verified.")
     except Exception as e:
-        logger.error(f"FATAL: Database connection failed: {e}")
-        raise RuntimeError(f"Database unavailable: {e}")
+        logger.warning(f"Database connection check warning: {e}")
 
     # Redis Verification
-    redis_host = os.getenv("REDIS_HOST", "localhost")
-    redis_port = int(os.getenv("REDIS_PORT", 6379))
-    try:
-        r = redis.Redis(host=redis_host, port=redis_port, decode_responses=True)
-        r.ping()
-        logger.info(f"Redis connection to {redis_host}:{redis_port} verified.")
-    except Exception as e:
-        logger.warning(f"Redis check warning: {e}. Local caching/queue will run with local fallbacks.")
+    if os.getenv("REDIS_ENABLED", "false").lower() == "true":
+        redis_host = os.getenv("REDIS_HOST", "localhost")
+        redis_port = int(os.getenv("REDIS_PORT", 6379))
+        try:
+            r = redis.Redis(host=redis_host, port=redis_port, decode_responses=True, socket_timeout=0.2, socket_connect_timeout=0.2)
+            r.ping()
+            logger.info(f"Redis connection to {redis_host}:{redis_port} verified.")
+        except Exception as e:
+            logger.warning(f"Redis check warning: {e}. Local caching/queue will run with local fallbacks.")
 
 
 # 5. Health Check Endpoints
