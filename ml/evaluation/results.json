@@ -1,0 +1,73 @@
+{
+  "evaluation_timestamp": "2026-09-05T17:51:02",
+  "model_version": "2.1.0",
+  "dataset_version": "synthetic_v2",
+  "feature_version": "v2.0",
+  "test_sample_size": 600,
+  "metrics": {
+    "roc_auc": 0.6415,
+    "pr_auc": 0.6586,
+    "brier_score": 0.2237,
+    "precision": 0.6452,
+    "recall": 0.8235,
+    "f1": 0.7235
+  },
+  "confusion_matrix": {
+    "tn": 106,
+    "fp": 154,
+    "fn": 60,
+    "tp": 280
+  },
+  "calibration": {
+    "bin_predicted": [
+      0.1801,
+      0.3016,
+      0.524,
+      0.6682
+    ],
+    "bin_actual": [
+      0.0,
+      0.243,
+      0.6043,
+      0.6612
+    ]
+  },
+  "per_action_performance": {
+    "escalate": {
+      "test_count": 100,
+      "actual_recovery_rate": 0.7,
+      "predicted_mean_prob": 0.6062787248145822,
+      "brier_score": 0.21944141387130195
+    },
+    "notification": {
+      "test_count": 100,
+      "actual_recovery_rate": 0.57,
+      "predicted_mean_prob": 0.6160476313654062,
+      "brier_score": 0.25470901697652576
+    },
+    "payment_link": {
+      "test_count": 100,
+      "actual_recovery_rate": 0.72,
+      "predicted_mean_prob": 0.684021968653497,
+      "brier_score": 0.2109441128648957
+    },
+    "retry_later": {
+      "test_count": 100,
+      "actual_recovery_rate": 0.53,
+      "predicted_mean_prob": 0.4828001652151208,
+      "brier_score": 0.23495729243212427
+    },
+    "retry_now": {
+      "test_count": 100,
+      "actual_recovery_rate": 0.25,
+      "predicted_mean_prob": 0.29388653703454093,
+      "brier_score": 0.18439283191392555
+    },
+    "wait": {
+      "test_count": 100,
+      "actual_recovery_rate": 0.63,
+      "predicted_mean_prob": 0.6545303316245153,
+      "brier_score": 0.23786638523351855
+    }
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "models": [
+    {
+      "model_name": "Simple Baseline (Class Prior)",
+      "ROC-AUC": 0.5,
+      "PR-AUC": 0.7833,
+      "Brier": 0.2456,
+      "precision": 0.5667,
+      "recall": 1.0,
+      "F1": 0.7234
+    },
+    {
+      "model_name": "Logistic Regression (Uncalibrated)",
+      "ROC-AUC": 0.7324,
+      "PR-AUC": 0.7629,
+      "Brier": 0.2046,
+      "precision": 0.6739,
+      "recall": 0.8206,
+      "F1": 0.7401
+    },
+    {
+      "model_name": "Calibrated Logistic Regression (Production)",
+      "ROC-AUC": 0.6415,
+      "PR-AUC": 0.6586,
+      "Brier": 0.2237,
+      "precision": 0.6452,
+      "recall": 0.8235,
+      "F1": 0.7235
+    }
+  ]
+}

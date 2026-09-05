@@ -1,0 +1,459 @@
+"""
+Simulation API endpoints for batch processing and scenario testing.
+"""
+import logging
+import random
+from typing import Dict, Any, List
+from datetime import datetime, timedelta
+from fastapi import APIRouter, HTTPException
+from sqlalchemy.orm import Session
+from ..services.recovery_case import get_recovery_case_service
+from ..services.payment_event import get_payment_event_service
+from ..services.agent_loop_service import get_agent_loop_service
+from ..services.diagnosis import get_failure_diagnosis_service
+from ..services.prediction import get_prediction_service
+from ..services.policy import get_policy_engine_service
+from ..services.executor import get_executor_service
+from ..services.verification import get_verification_service
+from ..database import SessionLocal
+from ..models.payment import Payment, PaymentStatus, PaymentMethod
+from ..models.merchant import Merchant
+from ..models.customer import Customer
+from ..models.recovery_case import RecoveryCase, RecoveryCaseStatus
+from ..models.failure_diagnosis import FailureDiagnosis
+from ..models.recovery_prediction import RecoveryPrediction
+from ..models.recovery_action import RecoveryAction, RecoveryActionType, RecoveryActionStatus
+from ..models.policy_decision import PolicyDecision, PolicyDecisionResult
+from ..models.audit_log import AuditLog
+from ..models.timeline_event import TimelineEvent
+from ..database import Base, engine
+import json
+
+logger = logging.getLogger(__name__)
+
+router = APIRouter(prefix="/simulate", tags=["simulation"])
+
+# Helper function to generate synthetic payment data
+def generate_synthetic_payment(db: Session, merchant_id: int, index: int) -> Dict[str, Any]:
+    """Generate a synthetic failed payment for simulation."""
+
+    # Different failure scenarios with realistic distributions
+    failure_scenarios = [
+        {"category": "insufficient_funds", "weight": 0.25},
+        {"category": "expired_card", "weight": 0.20},
+        {"category": "authentication_failed", "weight": 0.15},
+        {"category": "technical_error", "weight": 0.15},
+        {"category": "bank_declined", "weight": 0.15},
+        {"category": "transaction_not_allowed", "weight": 0.10}
+    ]
+
+    # Select failure category based on weights
+    rand_val = random.random()
+    cumulative_weight = 0
+    selected_failure = "insufficient_funds"  # default
+
+    for scenario in failure_scenarios:
+        cumulative_weight += scenario["weight"]
+        if rand_val <= cumulative_weight:
+            selected_failure = scenario["category"]
+            break
+
+    # Generate payment amount based on failure type (more realistic distributions)
+    if selected_failure == "insufficient_funds":
+        amount = round(random.uniform(500, 5000), 2)  # Smaller amounts more likely to fail for insufficient funds
+    elif selected_failure == "expired_card":
+        amount = round(random.uniform(1000, 10000), 2)  # Any amount
+    elif selected_failure == "authentication_failed":
+        amount = round(random.uniform(500, 15000), 2)  # Any amount
+    elif selected_failure == "technical_error":
+        amount = round(random.uniform(1000, 8000), 2)  # Medium amounts
+    elif selected_failure == "bank_declined":
+        amount = round(random.uniform(2000, 20000), 2)  # Higher amounts more likely to be declined
+    else:  # transaction_not_allowed
+        amount = round(random.uniform(1000, 15000), 2)  # Any amount
+
+    # Generate payment method
+    payment_methods = [PaymentMethod.CARD, PaymentMethod.UPI, PaymentMethod.NETBANKING, PaymentMethod.WALLET]
+    method = random.choice(payment_methods)
+
+    # Generate bank name based on method
+    banks = {
+        PaymentMethod.CARD: ["HDFC", "ICICI", "SBI", "Axis", "Kotak"],
+        PaymentMethod.UPI: ["PhonePe", "Google Pay", "Paytm", "Amazon Pay"],
+        PaymentMethod.NETBANKING: ["HDFC NetBanking", "ICICI NetBanking", "SBI NetBanking"],
+        PaymentMethod.WALLET: ["Paytm Wallet", "PhonePe Wallet", "Amazon Pay Balance"]
+    }
+    bank = random.choice(banks.get(method, ["Unknown Bank"]))
+
+    # Create payment record
+    payment = Payment(
+        merchant_id=merchant_id,
+        amount=amount,
+        currency="INR",
+        status=PaymentStatus.FAILED,
+        method=method,
+        bank=bank,
+        error_code=f"FAIL_{selected_failure.upper()}",
+        error_description=f"Payment failed due to {selected_failure.replace('_', ' ')}",
+        attempt_count=1
+    )
+
+    db.add(payment)
+    db.flush()
+
+    return {
+        "payment": payment,
+        "failure_category": selected_failure,
+        "amount": amount,
+        "method": method.value,
+        "bank": bank
+    }
+
+# Helper function to create customer and merchant if they don't exist
+def get_or_create_merchant_customer(db: Session) -> tuple:
+    """Get or create a test merchant and customer for simulation."""
+
+    # Get or create merchant
+    merchant = db.query(Merchant).filter(Merchant.merchant_reference == "SIM_MERCH_001").first()
+    if not merchant:
+        merchant = Merchant(
+            merchant_reference="SIM_MERCH_001",
+            name="Simulation Merchant",
+            email="merchant@simulation.com",
+            phone="+919876543210",
+            website="https://simulationmerchant.com",
+            razorpay_key_id="test_key_id",
+            razorpay_key_secret="test_key_secret",
+            webhook_secret="test_webhook_secret",
+            max_retries=3,
+            contact_start_hour=8,
+            contact_end_hour=20,
+            max_automated_amount=5000.00,
+            human_escalation_threshold=10000.00,
+            message_cooldown_hours=1,
+            case_expiry_hours=24,
+            timezone="UTC",
+            is_active=True,
+            is_test_mode=True
+        )
+        db.add(merchant)
+        db.flush()
+
+    # Get or create customer
+    customer = db.query(Customer).filter(Customer.customer_reference == "SIM_CUST_001").first()
+    if not customer:
+        customer = Customer(
+            customer_reference="SIM_CUST_001",
+            merchant_id=merchant.id,
+            name="Simulation Customer",
+            email="customer@simulation.com",
+            phone="+919876543211",
+            opted_out=False,
+            preferred_contact_method="email",
+            language="en",
+            risk_score=0.3,
+            tenure_days=365,
+            previous_successful_payments=10,
+            previous_failed_payments=2,
+            previous_recoveries=1
+        )
+        db.add(customer)
+        db.flush()
+
+    return merchant, customer
+
+@router.post("/batch")
+async def run_batch_simulation(
+    total_cases: int = 100
+) -> Dict[str, Any]:
+    """
+    Run a batch simulation of failed payments through the complete recovery pipeline.
+
+    This endpoint:
+    1. Generates synthetic failed payments
+    2. Creates recovery cases for each payment
+    3. Runs the agent loop for each case (diagnosis → prediction → policy → execution → verification)
+    4. Returns aggregated results
+    """
+    logger.info(f"Starting batch simulation for {total_cases} cases")
+
+    db = SessionLocal()
+    try:
+        # Get or create merchant and customer for simulation
+        merchant, customer = get_or_create_merchant_customer(db)
+
+        # Initialize services
+        recovery_case_service = get_recovery_case_service()
+        payment_event_service = get_payment_event_service()
+        agent_loop_service = get_agent_loop_service()
+        diagnosis_service = get_failure_diagnosis_service()
+        prediction_service = get_prediction_service()
+        policy_service = get_policy_engine_service()
+        executor_service = get_executor_service()
+        verification_service = get_verification_service()
+
+        # Results tracking
+        results = {
+            "total_injected": 0,
+            "diagnosed": 0,
+            "actions_chosen": 0,
+            "executed": 0,
+            "verified": 0,
+            "amount_recovered": 0.0,
+            "recovered_cases": 0,
+            "failed_cases": 0,
+            "policy_denied_actions": 0,
+            "llm_fallback_used": 0
+        }
+
+        logs = []
+
+        def add_log(message: str):
+            timestamp = datetime.now().strftime("%H:%M:%S")
+            log_entry = f"[{timestamp}] {message}"
+            logs.append(log_entry)
+            # Keep only last 100 logs to prevent memory issues
+            if len(logs) > 100:
+                logs.pop(0)
+            logger.info(message)
+
+        add_log(f"Starting batch simulation for {total_cases} synthetic failed payments")
+
+        # Process each synthetic payment
+        for i in range(total_cases):
+            try:
+                # Generate synthetic payment
+                payment_data = generate_synthetic_payment(db, merchant.id, i)
+                payment = payment_data["payment"]
+
+                add_log(f"Generated payment {payment.id} for {payment_data['amount']} INR ({payment_data['failure_category']})")
+
+                # Create recovery case from the failed payment
+                recovery_case = recovery_case_service.create_recovery_case_from_payment(payment.id)
+
+                add_log(f"Created recovery case {recovery_case.id} for payment {payment.id}")
+
+                # Run the agent loop for this case
+                # Note: For performance in batch simulation, we'll run a simplified version
+                # that goes through the key steps without the full iterative loop
+
+                # 1. Diagnosis
+                diagnosis_result = diagnosis_service.diagnose_failure(
+                    case_id=recovery_case.id,
+                    diagnosis_mode="rule_based"
+                )
+
+                if diagnosis_result["success"]:
+                    results["diagnosed"] += 1
+                    add_log(f"Diagnosed case {recovery_case.id}: {diagnosis_result['failure_category']} (confidence: {diagnosis_result['confidence']:.2f})")
+                else:
+                    add_log(f"Failed to diagnose case {recovery_case.id}: {diagnosis_result.get('error')}")
+                    continue
+
+                # 2. Prediction
+                prediction_result = prediction_service.predict_recovery(
+                    case_id=recovery_case.id,
+                    prediction_mode="heuristic"
+                )
+
+                if prediction_result["success"]:
+                    results["actions_chosen"] += 1
+                    best_action = max(
+                        prediction_result["predictions"].items(),
+                        key=lambda x: x[1]["probability"]
+                    )
+                    add_log(f"Predicted best action for case {recovery_case.id}: {best_action[0]} (probability: {best_action[1]['probability']:.2f})")
+                else:
+                    add_log(f"Failed to predict for case {recovery_case.id}: {prediction_result.get('error')}")
+                    continue
+
+                # 3. Policy evaluation and action selection (simplified)
+                # Get the best action from predictions
+                if prediction_result["success"]:
+                    best_action_type_str, best_action_data = max(
+                        prediction_result["predictions"].items(),
+                        key=lambda x: x[1]["probability"]
+                    )
+
+                    try:
+                        best_action_type = RecoveryActionType(best_action_type_str)
+
+                        # Create a temporary action for policy evaluation
+                        temp_action = RecoveryAction(
+                            case_id=recovery_case.id,
+                            action_type=best_action_type,
+                            reason=f"ML prediction: {best_action_data['probability']*100:.1f}% success probability",
+                            predicted_success_probability=best_action_data["probability"],
+                            status=RecoveryActionStatus.PROPOSED
+                        )
+
+                        # Evaluate against policy
+                        policy_result = policy_service.evaluate_action(
+                            case_id=recovery_case.id,
+                            action=temp_action,
+                            merchant=merchant
+                        )
+
+                        if policy_result["allowed"]:
+                            # Execute the action
+                            recovery_action = RecoveryAction(
+                                case_id=recovery_case.id,
+                                action_type=best_action_type,
+                                reason=temp_action.reason,
+                                predicted_success_probability=temp_action.predicted_success_probability,
+                                status=RecoveryActionStatus.APPROVED
+                            )
+
+                            db.add(recovery_action)
+                            db.flush()
+
+                            # Execute action
+                            execution_result = executor_service.execute_action(
+                                case_id=recovery_case.id,
+                                action=recovery_action,
+                                execution_mode="simulation"
+                            )
+
+                            if execution_result["success"]:
+                                recovery_action.status = RecoveryActionStatus.EXECUTED
+                                recovery_action.executed_at = datetime.utcnow()
+                                recovery_action.result = str(execution_result["details"])
+
+                                results["executed"] += 1
+
+                                # Verify the action resulted in recovery
+                                verification_result = verification_service.verify_recovery(
+                                    case_id=recovery_case.id,
+                                    action_id=recovery_action.id,
+                                    verification_mode="simulation"
+                                )
+
+                                if verification_result["success"]:
+                                    recovery_action.status = RecoveryActionStatus.VERIFIED
+                                    recovery_action.verified_at = datetime.utcnow()
+                                    recovery_action.result = str({
+                                        "recovered": verification_result["recovered"],
+                                        "details": verification_result["details"]
+                                    })
+
+                                    results["verified"] += 1
+
+                                    if verification_result["recovered"]:
+                                        # Update recovery case and payment as recovered
+                                        recovery_case.status = RecoveryCaseStatus.RECOVERED
+                                        recovery_case.closed_at = datetime.utcnow()
+                                        recovery_case.recovered_amount = payment.amount
+                                        payment.status = PaymentStatus.CAPTURED
+
+                                        results["recovered_cases"] += 1
+                                        results["amount_recovered"] += float(payment.amount)
+
+                                        add_log(f"Case {recovery_case.id} recovered ₹{payment.amount} via {best_action_type.value}")
+                                    else:
+                                        add_log(f"Case {recovery_case.id} verification failed - no recovery")
+                                else:
+                                    add_log(f"Verification failed for case {recovery_case.id}: {verification_result.get('error')}")
+                                    recovery_action.status = RecoveryActionStatus.DENIED
+                            else:
+                                add_log(f"Execution failed for case {recovery_case.id}: {execution_result.get('error')}")
+                                recovery_action.status = RecoveryActionStatus.DENIED
+                                results["policy_denied_actions"] += 1  # Count execution failures as policy issues for simplicity
+                        else:
+                            # Action denied by policy
+                            results["policy_denied_actions"] += 1
+                            add_log(f"Action {best_action_type.value} denied by policy for case {recovery_case.id}: {policy_result['denied_reason']}")
+
+                            # Record the policy denial in the timeline
+                            from ..services.timeline import get_timeline_service
+                            timeline_service = get_timeline_service()
+                            timeline_service.add_event_to_timeline(
+                                case_id=recovery_case.id,
+                                actor="policy_engine_service",
+                                action="policy_denial",
+                                input_data={
+                                    "action_type": best_action_type.value,
+                                    "reason": temp_action.reason
+                                },
+                                decision_data={
+                                    "denied": True,
+                                    "denied_reason": policy_result["denied_reason"],
+                                    "rule_violations": policy_result["rule_violations"]
+                                }
+                            )
+
+                    except ValueError as e:
+                        add_log(f"Invalid action type {best_action_type_str}: {str(e)}")
+                        continue
+
+                results["total_injected"] += 1
+
+                # Commit every 10 cases to avoid large transactions
+                if (i + 1) % 10 == 0:
+                    db.commit()
+                    add_log(f"Processed {i + 1}/{total_cases} cases")
+
+            except Exception as e:
+                db.rollback()
+                add_log(f"Error processing case {i}: {str(e)}")
+                logger.error(f"Error in batch simulation case {i}: {str(e)}", exc_info=True)
+                continue
+
+        # Final commit
+        db.commit()
+
+        # Calculate recovery rate
+        recovery_rate = (results["recovered_cases"] / results["total_injected"] * 100) if results["total_injected"] > 0 else 0
+
+        add_log(f"Batch simulation complete! Simulated recovery of ₹{results['amount_recovered']:.2f} across {results['recovered_cases']}/{results['total_injected']} synthetic cases ({recovery_rate:.1f}% simulated recovery rate)")
+
+        return {
+            "success": True,
+            "results": results,
+            "logs": logs,
+            "summary": {
+                "total_cases": results["total_injected"],
+                "recovered_cases": results["recovered_cases"],
+                "recovery_rate_percent": round(recovery_rate, 2),
+                "total_amount_recovered": round(results["amount_recovered"], 2),
+                "average_recovery_per_case": round(results["amount_recovered"] / results["recovered_cases"], 2) if results["recovered_cases"] > 0 else 0,
+                "policy_denial_rate": round((results["policy_denied_actions"] / results["total_injected"]) * 100, 2) if results["total_injected"] > 0 else 0
+            }
+        }
+
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error in batch simulation: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Batch simulation failed: {str(e)}")
+    finally:
+        db.close()
+
+# Scenario-based simulation endpoints
+@router.post("/scenario/{scenario_name}")
+async def run_scenario_simulation(
+    scenario_name: str,
+    case_count: int = 10
+) -> Dict[str, Any]:
+    """
+    Run a specific scenario simulation (insufficient funds, bank outage, opt-out, etc.)
+    """
+    logger.info(f"Starting scenario simulation: {scenario_name} with {case_count} cases")
+
+    # This would implement specific scenario logic
+    # For now, we'll redirect to the batch simulation with scenario-specific parameters
+    scenario_configs = {
+        "insufficient_funds": {"failure_bias": "insufficient_funds", "count": case_count},
+        "bank_outage": {"failure_bias": "technical_error", "count": case_count},
+        "opt_out": {"customer_opt_out": True, "count": case_count},
+        "high_value": {"min_amount": 15000, "count": case_count},
+        "multi_step": {"count": case_count}  # Cases that require multiple actions
+    }
+
+    if scenario_name not in scenario_configs:
+        raise HTTPException(status_code=400, detail=f"Unknown scenario: {scenario_name}")
+
+    # For simplicity, we'll use the batch simulation but could enhance with scenario-specific logic
+    result = await run_batch_simulation(case_count)
+    result["scenario"] = scenario_name
+    result["scenario_config"] = scenario_configs[scenario_name]
+
+    return result

@@ -1,0 +1,65 @@
+{
+  "num_runs": 5,
+  "seeds": [
+    1,
+    2,
+    3,
+    4,
+    5
+  ],
+  "sample_size_per_group_per_run": 100,
+  "recovery_lift_percent": {
+    "mean": 52.0,
+    "std_dev": 4.94,
+    "min": 45.0,
+    "max": 56.0
+  },
+  "incremental_revenue": {
+    "mean": 142390.44,
+    "std_dev": 14619.32,
+    "min": 121130.56,
+    "max": 165812.11
+  },
+  "runs": [
+    {
+      "seed": 1,
+      "control_recovery_rate": 14.0,
+      "ai_recovery_rate": 70.0,
+      "recovery_lift_percent": 56.0,
+      "incremental_revenue_recovered": 165812.11,
+      "net_incremental_revenue": 165736.11
+    },
+    {
+      "seed": 2,
+      "control_recovery_rate": 11.0,
+      "ai_recovery_rate": 67.0,
+      "recovery_lift_percent": 56.0,
+      "incremental_revenue_recovered": 143199.48,
+      "net_incremental_revenue": 143120.98
+    },
+    {
+      "seed": 3,
+      "control_recovery_rate": 9.0,
+      "ai_recovery_rate": 65.0,
+      "recovery_lift_percent": 56.0,
+      "incremental_revenue_recovered": 146517.42,
+      "net_incremental_revenue": 146438.42
+    },
+    {
+      "seed": 4,
+      "control_recovery_rate": 14.0,
+      "ai_recovery_rate": 59.0,
+      "recovery_lift_percent": 45.0,
+      "incremental_revenue_recovered": 135292.65,
+      "net_incremental_revenue": 135219.65
+    },
+    {
+      "seed": 5,
+      "control_recovery_rate": 14.0,
+      "ai_recovery_rate": 61.0,
+      "recovery_lift_percent": 47.0,
+      "incremental_revenue_recovered": 121130.56,
+      "net_incremental_revenue": 121046.06
+    }
+  ]
+}

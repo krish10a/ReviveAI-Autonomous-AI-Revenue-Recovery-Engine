@@ -1,0 +1,44 @@
+{
+  "model_name": "ReviveAI_ActionConditionedPredictor",
+  "version": "2.0.0",
+  "algorithm": "CalibratedClassifierCV(LogisticRegression)",
+  "training_timestamp": "2026-09-05T17:51:01.951129+00:00",
+  "training_seed": 42,
+  "dataset_size": 3000,
+  "train_samples": 2400,
+  "test_samples": 600,
+  "actions": [
+    "retry_now",
+    "retry_later",
+    "payment_link",
+    "notification",
+    "escalate",
+    "wait"
+  ],
+  "numeric_features": [
+    "amount",
+    "hour",
+    "day_of_week",
+    "customer_tenure",
+    "previous_successful_payments",
+    "previous_failed_payments",
+    "previous_recoveries",
+    "retry_count",
+    "time_since_failure",
+    "failure_streak",
+    "amount_relative_to_customer_history",
+    "recent_bank_failure_rate",
+    "historical_success_rate"
+  ],
+  "categorical_features": [
+    "payment_method",
+    "bank",
+    "failure_category",
+    "merchant_category",
+    "action"
+  ],
+  "test_roc_auc": 0.6415,
+  "test_brier_score": 0.2237,
+  "model_path": "C:\\Users\\ASUS\\Desktop\\Reviv\\revive-ai\\ml\\models\\model.pkl",
+  "pipeline_path": "C:\\Users\\ASUS\\Desktop\\Reviv\\revive-ai\\ml\\models\\feature_pipeline.pkl"
+}
