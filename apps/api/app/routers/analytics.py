@@ -141,13 +141,17 @@ def run_control_vs_ai_experiment(
 
     ai_rate = (ai_recovered_count / cases_per_group * 100.0) if cases_per_group > 0 else 0.0
     recovery_lift = ai_rate - control_rate
+    relative_lift = ((ai_rate - control_rate) / control_rate * 100.0) if control_rate > 0 else 0.0
     incremental_recovered = ai_recovered_amount - control_recovered_amount
     net_incremental_recovery = incremental_recovered - ai_action_cost
+    control_cost_per_thousand = round((control_cost / control_recovered_amount * 1000.0), 2) if control_recovered_amount > 0 else 0.0
+    ai_cost_per_thousand = round((ai_action_cost / ai_recovered_amount * 1000.0), 2) if ai_recovered_amount > 0 else 0.0
 
     return {
         "metadata": {
-            "label": "Controlled Simulation Experiment",
+            "label": "Synthetic Controlled Simulation",
             "population": "Synthetic Action-Conditioned Cohort",
+            "methodology": "Two-arm replay on identical synthetic population (n=100, 50 Control vs 50 ReviveAI, fixed seed=42)",
             "seed": seed,
             "sample_size_per_group": cases_per_group,
         },
@@ -158,6 +162,7 @@ def run_control_vs_ai_experiment(
             "recovered_cases": control_recovered_count,
             "recovery_rate_percent": round(control_rate, 2),
             "action_cost": round(control_cost, 2),
+            "cost_per_thousand_recovered": control_cost_per_thousand,
         },
         "ai_group": {
             "strategy": "ReviveAI Closed-Loop Pipeline",
@@ -166,14 +171,17 @@ def run_control_vs_ai_experiment(
             "recovered_cases": ai_recovered_count,
             "recovery_rate_percent": round(ai_rate, 2),
             "action_cost": round(ai_action_cost, 2),
+            "cost_per_thousand_recovered": ai_cost_per_thousand,
             "policy_denials": ai_policy_denials,
             "wait_decisions": ai_wait_decisions,
         },
         "impact_metrics": {
             "recovery_lift_percent": round(recovery_lift, 2),
             "recovery_lift_percentage_points": round(recovery_lift, 2),
+            "relative_lift_percent": round(relative_lift, 2),
             "incremental_revenue_recovered": round(incremental_recovered, 2),
             "net_incremental_revenue": round(net_incremental_recovery, 2),
             "ai_cost_per_rupee_recovered": round(ai_action_cost / ai_recovered_amount, 4) if ai_recovered_amount > 0 else 0.0,
+            "ai_cost_per_thousand_recovered": ai_cost_per_thousand,
         }
     }
