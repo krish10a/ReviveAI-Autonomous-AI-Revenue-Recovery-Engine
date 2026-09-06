@@ -153,6 +153,7 @@ export default function Dashboard() {
   };
 
   const runBatchSimulation = async () => {
+    console.log("[ReviveAI] runBatchSimulation started");
     try {
       setSimulating(true);
       const res = await fetch("/api/simulate/batch?total_cases=25", { method: "POST" });
@@ -167,6 +168,7 @@ export default function Dashboard() {
   };
 
   useEffect(() => {
+    console.log("[ReviveAI] Dashboard mounted");
     const timer = setTimeout(() => {
       fetchOverview(true);
       triggerExperiment(true);
@@ -195,7 +197,16 @@ export default function Dashboard() {
             <RefreshCw className={`w-4 h-4 mr-2 ${loading ? "animate-spin" : ""}`} />
             Sync DB
           </Button>
-          <Button variant="default" size="sm" onClick={runBatchSimulation} disabled={simulating}>
+          <Button
+            type="button"
+            variant="default"
+            size="sm"
+            onClick={() => {
+              console.log("[ReviveAI] Run Batch Simulation button clicked");
+              runBatchSimulation();
+            }}
+            disabled={simulating}
+          >
             <Zap className="w-4 h-4 mr-2" />
             {simulating ? "Injecting & Resolving..." : "Run Batch Simulation (25)"}
           </Button>
@@ -280,27 +291,27 @@ export default function Dashboard() {
             <div className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
               <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Control Group</span>
               <p className="text-xl font-bold text-slate-700 dark:text-slate-300 mt-1">
-                {experiment?.control_group.recovery_rate_percent ?? 0}%
+                {experiment?.control_group?.recovery_rate_percent ?? 0}%
               </p>
               <p className="text-xs text-slate-500 mt-1">
-                ₹{(experiment?.control_group.recovered_revenue ?? 0).toLocaleString()} recovered (Cost: ₹{experiment?.control_group.action_cost ?? 0})
+                ₹{(experiment?.control_group?.recovered_revenue ?? 0).toLocaleString()} recovered (Cost: ₹{experiment?.control_group?.action_cost ?? 0})
               </p>
             </div>
 
             <div className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-emerald-300 dark:border-emerald-800">
               <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">ReviveAI Group</span>
               <p className="text-xl font-bold text-emerald-600 dark:text-emerald-400 mt-1">
-                {experiment?.ai_group.recovery_rate_percent ?? 0}%
+                {experiment?.ai_group?.recovery_rate_percent ?? 0}%
               </p>
               <p className="text-xs text-slate-500 mt-1">
-                ₹{(experiment?.ai_group.recovered_revenue ?? 0).toLocaleString()} recovered (Cost: ₹{experiment?.ai_group.action_cost ?? 0})
+                ₹{(experiment?.ai_group?.recovered_revenue ?? 0).toLocaleString()} recovered (Cost: ₹{experiment?.ai_group?.action_cost ?? 0})
               </p>
             </div>
 
             <div className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-blue-300 dark:border-blue-800">
               <span className="text-xs font-semibold text-blue-600 dark:text-blue-400 uppercase tracking-wider">Recovery Lift</span>
               <p className="text-xl font-bold text-blue-600 dark:text-blue-400 mt-1">
-                +{experiment?.impact_metrics.recovery_lift_percent ?? 0}%
+                +{experiment?.impact_metrics?.recovery_lift_percent ?? 0}%
               </p>
               <p className="text-xs text-slate-500 mt-1">Incremental efficiency gain over baseline</p>
             </div>
@@ -308,7 +319,7 @@ export default function Dashboard() {
             <div className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-indigo-300 dark:border-indigo-800">
               <span className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">Net Incremental ₹</span>
               <p className="text-xl font-bold text-indigo-600 dark:text-indigo-400 mt-1">
-                ₹{(experiment?.impact_metrics.net_incremental_revenue ?? 0).toLocaleString()}
+                ₹{(experiment?.impact_metrics?.net_incremental_revenue ?? 0).toLocaleString()}
               </p>
               <p className="text-xs text-slate-500 mt-1">Net revenue after subtracting action costs</p>
             </div>

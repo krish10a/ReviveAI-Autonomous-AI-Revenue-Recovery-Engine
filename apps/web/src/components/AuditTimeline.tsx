@@ -78,7 +78,14 @@ export default function AuditTimeline({ caseId }: AuditTimelineProps) {
         }
 
         const isDenied = decObj?.result === "DENIED" || decObj?.denied;
-        const timeStr = new Date(evt.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+        const timeStr = evt.timestamp ? (() => {
+          try {
+            const d = new Date(evt.timestamp);
+            return isNaN(d.getTime()) ? String(evt.timestamp) : d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+          } catch {
+            return String(evt.timestamp);
+          }
+        })() : "";
 
         return (
           <div key={evt.id} className="relative group">
@@ -106,7 +113,7 @@ export default function AuditTimeline({ caseId }: AuditTimelineProps) {
                       {decObj.reason}
                     </p>
                   )}
-                  {decObj.rule_violations && decObj.rule_violations.length > 0 && (
+                  {Array.isArray(decObj.rule_violations) && decObj.rule_violations.length > 0 && (
                     <div className="flex gap-1 mt-1">
                       {decObj.rule_violations.map((v: string) => (
                         <Badge key={v} variant="destructive" className="text-[10px] py-0 px-1.5">
