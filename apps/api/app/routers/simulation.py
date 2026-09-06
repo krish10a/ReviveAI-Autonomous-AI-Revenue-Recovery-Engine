@@ -360,6 +360,7 @@ async def run_batch_simulation(
                             case_id=recovery_case.id,
                             action=temp_action,
                             merchant=merchant,
+                            eval_time=datetime(2026, 9, 7, 10, 30, 0),
                             db=db
                         )
 

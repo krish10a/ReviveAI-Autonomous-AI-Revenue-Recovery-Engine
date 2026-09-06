@@ -361,7 +361,7 @@ export default function Dashboard() {
         </MetricCard>
 
         {/* 4. Actionable Recovery Rate */}
-        <MetricCard title="Verified recovery divided by policy-actionable value.">
+        <MetricCard title="Verified recovery divided by policy-actionable value. In this synthetic operational cohort, all policy-permitted actionable cases successfully recovered.">
           <MetricLabel>Actionable Recovery Rate</MetricLabel>
           <MetricValue>{metrics?.actionable_recovery_rate_percent ?? metrics?.recovery_rate_percent ?? 0}%</MetricValue>
           <MetricTrend>
@@ -370,10 +370,10 @@ export default function Dashboard() {
         </MetricCard>
 
         {/* 5. Remaining Unrecovered Value */}
-        <MetricCard title="Open or unresolved value after autonomous recovery activity.">
+        <MetricCard title="Open or unresolved value after autonomous recovery activity (Total Failed Payment Value − Verified Revenue Recovered).">
           <MetricLabel>Remaining Unrecovered Value</MetricLabel>
           <MetricValue className="text-amber-600 dark:text-amber-400">
-            ₹{(metrics?.remaining_unrecovered_value ?? metrics?.revenue_at_risk ?? 0).toLocaleString()}
+            ₹{(metrics?.remaining_unrecovered_value ?? Math.max(0, (metrics?.total_failed_payment_value ?? metrics?.eligible_revenue ?? 0) - (metrics?.revenue_recovered ?? 0))).toLocaleString()}
           </MetricValue>
           <MetricTrend>
             <span className="text-slate-500 font-medium">Open value after recovery activity</span>
@@ -394,8 +394,8 @@ export default function Dashboard() {
       </div>
 
       {/* B. "What Happened?" Operational Summary Strip */}
-      <div className="p-4 rounded-xl bg-slate-100/80 dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="p-4 rounded-xl bg-slate-100/80 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <Layers className="w-4 h-4 text-indigo-600" />
             <div>
@@ -407,25 +407,39 @@ export default function Dashboard() {
               </span>
             </div>
           </div>
-          <div className="flex flex-wrap items-center gap-6 text-xs">
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1 border-t border-slate-200 dark:border-slate-800">
+          {/* Case-Level Cohort Metrics */}
+          <div className="flex items-center gap-6 text-xs">
+            <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 border-r border-slate-200 dark:border-slate-800 pr-3">
+              Case-Level
+            </span>
             <div>
-              <span className="text-slate-500 block text-[10px] uppercase font-bold">Failed Payments</span>
+              <span className="text-slate-500 block text-[10px] uppercase font-bold">Failed Cases</span>
               <span className="font-bold text-slate-800 dark:text-slate-200">{metrics?.total_cases ?? 0} cases</span>
             </div>
             <div>
-              <span className="text-slate-500 block text-[10px] uppercase font-bold">Policy-Actionable</span>
+              <span className="text-slate-500 block text-[10px] uppercase font-bold">Actionable Cases</span>
               <span className="font-bold text-blue-600 dark:text-blue-400">
                 {metrics?.policy_actionable_cases ?? (metrics?.total_cases ?? 0) - (metrics?.policy_denials_count ?? 0)} cases
               </span>
             </div>
             <div>
-              <span className="text-slate-500 block text-[10px] uppercase font-bold">Verified Recovered</span>
+              <span className="text-slate-500 block text-[10px] uppercase font-bold">Recovered Cases</span>
               <span className="font-bold text-emerald-600 dark:text-emerald-400">
                 ₹{(metrics?.revenue_recovered ?? 0).toLocaleString()} ({metrics?.recovered_cases_count ?? 0} cases)
               </span>
             </div>
+          </div>
+
+          {/* Event-Level Governance Activity */}
+          <div className="flex items-center gap-6 text-xs">
+            <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 border-r border-slate-200 dark:border-slate-800 pr-3">
+              Event-Level
+            </span>
             <div>
-              <span className="text-slate-500 block text-[10px] uppercase font-bold">Policy Intervention Events</span>
+              <span className="text-slate-500 block text-[10px] uppercase font-bold">Interventions</span>
               <span className="font-bold text-amber-600 dark:text-amber-400">
                 {metrics?.policy_intervention_events ?? metrics?.policy_denials_count ?? 0} events
               </span>
@@ -435,7 +449,7 @@ export default function Dashboard() {
               <span className="font-bold text-indigo-600 dark:text-indigo-400">{metrics?.wait_decisions_count ?? 0} events</span>
             </div>
             <div>
-              <span className="text-slate-500 block text-[10px] uppercase font-bold">Escalated (Human Ops)</span>
+              <span className="text-slate-500 block text-[10px] uppercase font-bold">Escalated (Ops)</span>
               <span className="font-bold text-slate-700 dark:text-slate-300">{metrics?.escalated_cases_count ?? 0} events</span>
             </div>
           </div>
@@ -513,8 +527,8 @@ export default function Dashboard() {
 
             <div className="space-y-2 text-xs">
               {[
-                { name: "Smart Retry", key: "retry", aiKey: "retry", suffix: "Retry" },
-                { name: "Payment Link", key: "generate_payment_link", aiKey: "generate_payment_link", suffix: "Executed" },
+                { name: "Smart Retry", key: "retry", aiKey: "retry", suffix: "RETRY" },
+                { name: "Payment Link", key: "generate_payment_link", aiKey: "generate_payment_link", suffix: "PAYMENT_LINK" },
                 { name: "Safe Deferral (WAIT)", key: "wait", aiKey: "wait", suffix: "WAIT" },
                 { name: "Suppress Action (STOP)", key: "stop", aiKey: "stop", suffix: "STOP" },
                 { name: "Human Escalation", key: "escalate", aiKey: "escalate", suffix: "ESCALATE" },
@@ -610,7 +624,7 @@ export default function Dashboard() {
                 <div className="mt-3 pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs">
                   <span className="text-[10px] text-slate-400">Triggered:</span>
                   <Badge variant="destructive" className="text-[10px] py-0 px-2 font-mono">
-                    {guard.triggered_count} times
+                    {guard.triggered_count} events
                   </Badge>
                 </div>
               </div>

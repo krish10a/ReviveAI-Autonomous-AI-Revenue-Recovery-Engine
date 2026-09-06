@@ -17,6 +17,7 @@ from ..models.payment import Payment, PaymentStatus
 from ..models.recovery_action import RecoveryAction, RecoveryActionType, RecoveryActionStatus
 from ..models.policy_decision import PolicyDecision, PolicyDecisionResult
 from ..models.recovery_ledger import RecoveryLedger
+from ..models.failure_diagnosis import FailureDiagnosis
 
 logger = logging.getLogger(__name__)
 
@@ -44,23 +45,25 @@ class LiveAnalyticsService:
             total_cases = int(total_cases_agg.total_cases or 0)
             eligible_revenue = float(total_cases_agg.eligible_amount or 0.0)
 
-            # 3. Revenue Recovered & Cost from Recovery Ledger
+            # 3. Revenue Recovered & Cost from Recovery Ledger (Primary Source of Truth)
             ledger_agg = db.query(
-                func.count(RecoveryLedger.id).label("recovered_count"),
+                func.count(func.distinct(RecoveryLedger.case_id)).label("recovered_cases_count"),
                 func.coalesce(func.sum(RecoveryLedger.gross_amount), 0).label("gross_recovered"),
                 func.coalesce(func.sum(RecoveryLedger.action_cost), 0).label("total_action_cost"),
                 func.coalesce(func.sum(RecoveryLedger.net_recovered), 0).label("net_recovered"),
             ).first()
 
-            # Fallback to recovery_cases if ledger is fresh
             ledger_recovered_amount = float(ledger_agg.gross_recovered or 0.0)
-            if ledger_recovered_amount == 0:
-                rc_recovered = db.query(
-                    func.coalesce(func.sum(RecoveryCase.amount), 0)
-                ).filter(RecoveryCase.status == RecoveryCaseStatus.RECOVERED).scalar()
-                revenue_recovered = float(rc_recovered or 0.0)
-            else:
+            if ledger_recovered_amount > 0:
                 revenue_recovered = ledger_recovered_amount
+                recovered_cases = int(ledger_agg.recovered_cases_count or 0)
+            else:
+                rc_agg = db.query(
+                    func.count(RecoveryCase.id).label("cnt"),
+                    func.coalesce(func.sum(RecoveryCase.amount), 0).label("amt")
+                ).filter(RecoveryCase.status == RecoveryCaseStatus.RECOVERED).first()
+                revenue_recovered = float(rc_agg.amt or 0.0) if rc_agg else 0.0
+                recovered_cases = int(rc_agg.cnt or 0) if rc_agg else 0
 
             recovery_cost = float(ledger_agg.total_action_cost or 0.0)
             net_recovered = float(ledger_agg.net_recovered or (revenue_recovered - recovery_cost))
@@ -83,11 +86,6 @@ class LiveAnalyticsService:
             ).scalar() or 0
             escalation_rate = (escalated_count / total_cases * 100.0) if total_cases > 0 else 0.0
 
-            # 5. Case Status Counts
-            recovered_cases = db.query(func.count(RecoveryCase.id)).filter(
-                RecoveryCase.status == RecoveryCaseStatus.RECOVERED
-            ).scalar() or 0
-
             # Guaranteed reconciliation: eligible_revenue is always >= revenue_recovered
             if eligible_revenue < revenue_recovered:
                 eligible_revenue = revenue_recovered + revenue_at_risk
@@ -96,34 +94,75 @@ class LiveAnalyticsService:
             cost_per_rupee = (recovery_cost / revenue_recovered) if revenue_recovered > 0 else 0.0
             cost_per_thousand = (recovery_cost / revenue_recovered * 1000.0) if revenue_recovered > 0 else 0.0
 
-            approved_cases = db.query(func.count(func.distinct(RecoveryAction.case_id))).filter(
-                RecoveryAction.status.in_([RecoveryActionStatus.APPROVED, RecoveryActionStatus.EXECUTED, RecoveryActionStatus.VERIFIED])
+            # Active recovery actions (attempts to collect revenue; excludes protective outcomes STOP/WAIT/ESCALATE)
+            ACTIVE_RECOVERY_TYPES = [
+                RecoveryActionType.RETRY,
+                RecoveryActionType.GENERATE_PAYMENT_LINK,
+            ]
+
+            # Allowed recovery actions
+            actionable_case_ids_query = db.query(RecoveryAction.case_id).filter(
+                RecoveryAction.action_type.in_(ACTIVE_RECOVERY_TYPES),
+                RecoveryAction.status.in_([
+                    RecoveryActionStatus.APPROVED,
+                    RecoveryActionStatus.EXECUTED,
+                    RecoveryActionStatus.VERIFIED
+                ])
+            ).distinct()
+
+            policy_actionable_cases = db.query(func.count(func.distinct(RecoveryCase.id))).filter(
+                RecoveryCase.id.in_(actionable_case_ids_query)
             ).scalar() or 0
 
-            policy_actionable_cases = approved_cases
             policy_actionable_value = float(db.query(
                 func.coalesce(func.sum(RecoveryCase.amount), 0)
             ).filter(
-                RecoveryCase.id.in_(
-                    db.query(RecoveryAction.case_id).filter(
-                        RecoveryAction.status.in_([RecoveryActionStatus.APPROVED, RecoveryActionStatus.EXECUTED, RecoveryActionStatus.VERIFIED])
-                    )
-                )
+                RecoveryCase.id.in_(actionable_case_ids_query)
             ).scalar() or 0.0)
 
+            # Executed recovery actions
+            executed_case_ids_query = db.query(RecoveryAction.case_id).filter(
+                RecoveryAction.action_type.in_(ACTIVE_RECOVERY_TYPES),
+                RecoveryAction.status.in_([
+                    RecoveryActionStatus.EXECUTED,
+                    RecoveryActionStatus.VERIFIED
+                ])
+            ).distinct()
+
+            executed_cases = db.query(func.count(func.distinct(RecoveryCase.id))).filter(
+                RecoveryCase.id.in_(executed_case_ids_query)
+            ).scalar() or 0
+
+            executed_value = float(db.query(
+                func.coalesce(func.sum(RecoveryCase.amount), 0)
+            ).filter(
+                RecoveryCase.id.in_(executed_case_ids_query)
+            ).scalar() or 0.0)
+
+            # Diagnosed cases
+            diagnosed_case_ids = db.query(FailureDiagnosis.case_id).distinct()
+            diagnosed_cases = db.query(func.count(func.distinct(RecoveryCase.id))).filter(
+                RecoveryCase.id.in_(diagnosed_case_ids)
+            ).scalar() or total_cases
+            diagnosed_value = float(db.query(
+                func.coalesce(func.sum(RecoveryCase.amount), 0)
+            ).filter(
+                RecoveryCase.id.in_(diagnosed_case_ids)
+            ).scalar() or eligible_revenue)
+
+            # Actionable recovery rate: Verified Recovered / Policy-Actionable Value
             actionable_recovery_rate = min(100.0, (revenue_recovered / policy_actionable_value * 100.0)) if policy_actionable_value > 0 else 0.0
             cohort_recovery_ratio = min(100.0, (revenue_recovered / eligible_revenue * 100.0)) if eligible_revenue > 0 else 0.0
 
-            executed_cases = db.query(func.count(func.distinct(RecoveryAction.case_id))).filter(
-                RecoveryAction.status.in_([RecoveryActionStatus.EXECUTED, RecoveryActionStatus.VERIFIED])
-            ).scalar() or 0
+            # Remaining unrecovered value derived consistently from cohort: Total Failed - Verified Recovered
+            remaining_unrecovered = max(0.0, eligible_revenue - revenue_recovered)
 
             funnel = [
                 {"stage": "Failed Payments", "count": total_cases, "amount": round(eligible_revenue, 2)},
-                {"stage": "Diagnosed", "count": total_cases, "amount": round(eligible_revenue, 2)},
-                {"stage": "Policy-Actionable", "count": approved_cases, "amount": round(policy_actionable_value, 2)},
-                {"stage": "Recovery Action Allowed", "count": approved_cases, "amount": round(policy_actionable_value, 2)},
-                {"stage": "Recovery Action Executed", "count": executed_cases, "amount": round(policy_actionable_value, 2)},
+                {"stage": "Diagnosed", "count": diagnosed_cases, "amount": round(diagnosed_value, 2)},
+                {"stage": "Policy-Actionable", "count": policy_actionable_cases, "amount": round(policy_actionable_value, 2)},
+                {"stage": "Recovery Action Allowed", "count": policy_actionable_cases, "amount": round(policy_actionable_value, 2)},
+                {"stage": "Recovery Action Executed", "count": executed_cases, "amount": round(executed_value, 2)},
                 {"stage": "Independently Verified Recovery", "count": recovered_cases, "amount": round(revenue_recovered, 2)},
             ]
 
@@ -189,10 +228,10 @@ class LiveAnalyticsService:
             return {
                 "total_failed_payment_value": round(eligible_revenue, 2),
                 "policy_actionable_value": round(policy_actionable_value, 2),
-                "policy_actionable_cases": approved_cases,
+                "policy_actionable_cases": policy_actionable_cases,
                 "actionable_recovery_rate_percent": round(actionable_recovery_rate, 2),
                 "cohort_recovery_ratio_percent": round(cohort_recovery_ratio, 2),
-                "remaining_unrecovered_value": round(revenue_at_risk, 2),
+                "remaining_unrecovered_value": round(remaining_unrecovered, 2),
                 "policy_intervention_events": int(policy_denials),
                 "revenue_at_risk": round(revenue_at_risk, 2),
                 "eligible_revenue": round(eligible_revenue, 2),

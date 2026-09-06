@@ -91,20 +91,32 @@ class IndependentVerificationService:
                 "details": {},
             }
 
+            act_type = action.action_type
+            if hasattr(act_type, "value"):
+                act_type = act_type.value
+            act_type_str = str(act_type).lower()
+
             # 1. Independent Check: Look for incoming payment.captured webhook event
             captured_event = db.query(PaymentEvent).filter(
                 PaymentEvent.payment_id == payment.id,
                 PaymentEvent.event_type == "payment.captured"
             ).first()
 
-            is_already_captured = payment.status in [PaymentStatus.CAPTURED, "captured"]
-
-            if captured_event or is_already_captured:
-                # Confirmed independent proof of payment capture
-                recovered = True
-                provider_ref = captured_event.razorpay_event_id if captured_event else f"pay_captured_{payment.id}"
+            # Protective actions (STOP, WAIT, ESCALATE) are policy barriers, never revenue recovery events
+            if act_type_str in ["escalate", "stop", "wait"]:
+                recovered = False
+                provider_ref = None
                 verification_result["details"] = {
-                    "proof_source": "payment_captured_webhook_event" if captured_event else "confirmed_payment_state",
+                    "proof_source": "protective_policy_barrier",
+                    "action_type": act_type_str,
+                    "message": f"Action {act_type_str.upper()} is a protective policy barrier; no recovery attempted or claimed."
+                }
+            elif captured_event:
+                # Confirmed independent proof of payment capture via webhook event
+                recovered = True
+                provider_ref = captured_event.razorpay_event_id
+                verification_result["details"] = {
+                    "proof_source": "payment_captured_webhook_event",
                     "provider_reference": provider_ref,
                     "confidence": 1.0,
                 }
@@ -192,8 +204,10 @@ class IndependentVerificationService:
                 db.add(audit_log)
 
             else:
-                # Verification failed or pending; case remains open for replanning
-                action.status = RecoveryActionStatus.DENIED
+                # Verification confirmed no automated fund capture (e.g. wait, stop, escalate, or unrecovered)
+                # If action was EXECUTED by bounded executor, preserve EXECUTED status rather than falsely marking DENIED
+                if action.status != RecoveryActionStatus.EXECUTED:
+                    action.status = RecoveryActionStatus.DENIED
                 action.result = json.dumps(verification_result["details"])
 
                 act_type_str = action.action_type.value if hasattr(action.action_type, 'value') else str(action.action_type).lower()
