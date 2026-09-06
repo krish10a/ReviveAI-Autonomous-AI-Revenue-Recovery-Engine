@@ -196,13 +196,24 @@ class IndependentVerificationService:
                 action.status = RecoveryActionStatus.DENIED
                 action.result = json.dumps(verification_result["details"])
 
+                act_type_str = action.action_type.value if hasattr(action.action_type, 'value') else str(action.action_type).lower()
+                if act_type_str == "stop":
+                    unresolved_action_name = "VERIFY_CUSTOMER_PROTECTED"
+                    msg = "Zero harassment guardrail verified. No further action taken."
+                elif act_type_str == "wait":
+                    unresolved_action_name = "VERIFY_RECOVERY_DEFERRED"
+                    msg = "Recovery attempt deferred due to bank outage or degradation."
+                else:
+                    unresolved_action_name = "VERIFY_RECOVERY_UNRESOLVED"
+                    msg = "Action did not achieve verified fund capture. Escalated or pending replanning."
+
                 timeline_service = get_timeline_service()
                 timeline_service.add_event_to_timeline(
                     case_id=case_id,
                     actor="IndependentVerification",
-                    action="VERIFY_RECOVERY_UNRESOLVED",
+                    action=unresolved_action_name,
                     input_data={"action_id": action.id, "mode": verification_mode},
-                    decision_data={"message": "Action did not achieve verified fund capture. Re-evaluating next step."},
+                    decision_data={"message": msg},
                     db=db,
                 )
 
@@ -234,7 +245,7 @@ class IndependentVerificationService:
 
         err_code = str(payment.error_code or "").upper()
 
-        if act_type_str in ["escalate", "stop"]:
+        if act_type_str in ["escalate", "stop", "wait"]:
             return False
 
         # If expired card, retry definitely fails (0% chance); payment_link succeeds

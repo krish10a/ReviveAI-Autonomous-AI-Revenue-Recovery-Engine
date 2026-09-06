@@ -31,13 +31,14 @@ class TimelineService:
             if not recovery_case:
                 raise ValueError(f"Recovery case {case_id} not found")
 
+            import json
             # Create the timeline event
             timeline_event = TimelineEvent(
                 case_id=case_id,
                 actor=actor,
                 action=action,
-                input_json=str(input_data) if input_data is not None else None,
-                decision_json=str(decision_data) if decision_data is not None else None
+                input_json=json.dumps(input_data) if input_data is not None else None,
+                decision_json=json.dumps(decision_data) if decision_data is not None else None
             )
 
             db.add(timeline_event)

@@ -20,6 +20,7 @@ from ..models.policy_decision import PolicyDecision, PolicyDecisionResult
 from ..models.recovery_action import RecoveryAction, RecoveryActionType
 from ..models.communication import Communication
 from ..config import is_quiet_hours, QUIET_HOURS_START_HOUR, QUIET_HOURS_END_HOUR
+from ..services.timeline import get_timeline_service
 
 logger = logging.getLogger(__name__)
 
@@ -166,6 +167,24 @@ class PolicyEngineService:
                 reason=primary_reason,
             )
             db.add(policy_decision)
+
+            timeline_service = get_timeline_service()
+            timeline_service.add_event_to_timeline(
+                case_id=case_id,
+                actor="ReviveAI::PolicyEngine",
+                action="EVALUATE_POLICY",
+                input_data={
+                    "scenario": recovery_case.scenario_key,
+                    "action": action_type_str,
+                    "amount": float(recovery_case.amount),
+                },
+                decision_data={
+                    "result": "ALLOWED" if allowed else "DENIED",
+                    "reason": primary_reason,
+                    "rule_violations": rule_violations,
+                },
+                db=db,
+            )
             if should_close:
                 db.commit()
             else:

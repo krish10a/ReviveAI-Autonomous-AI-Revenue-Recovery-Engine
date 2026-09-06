@@ -28,10 +28,17 @@ from apps.api.app.services.executor import get_executor_service
 from apps.api.app.services.verification import get_verification_service
 from apps.api.app.services.prediction import get_prediction_service
 
+from database.seed.seed_demo import seed_database
+
 policy_service = get_policy_engine_service()
 executor = get_executor_service()
 verifier = get_verification_service()
 prediction_service = get_prediction_service()
+
+
+@pytest.fixture(autouse=True)
+def setup_seed():
+    seed_database()
 
 
 def test_e2e_1_recovery_path():
