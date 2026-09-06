@@ -85,7 +85,7 @@ def test_scenario_4_exact_single_execution():
     events = ts.get_timeline_for_scenario("SCENARIO_4_HIGH_VALUE")
     actions = [e.action for e in events]
     assert actions.count("EXECUTE_ESCALATE") == 1, f"Expected exactly 1 EXECUTE_ESCALATE in Scenario 4, got {actions}"
-    assert actions.count("VERIFY_RECOVERY_UNRESOLVED") == 1
+    assert actions.count("VERIFY_ESCALATION_STATUS") == 1
     assert len(events) == 5, f"Expected 5 timeline events for Scenario 4, got {len(events)}: {actions}"
 
 

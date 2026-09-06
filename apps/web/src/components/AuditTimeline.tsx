@@ -104,6 +104,18 @@ export default function AuditTimeline({ caseId, scenarioKey }: AuditTimelineProp
       return <Badge variant="default" className="text-[10px] bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300">EXECUTED</Badge>;
     }
     if (actUpper.includes("VERIFY")) {
+      if (actUpper.includes("ESCALAT") || actUpper.includes("PENDING")) {
+        return <Badge variant="outline" className="text-[10px] text-amber-600 border-amber-300 dark:text-amber-400 dark:border-amber-700">PENDING HUMAN RESOLUTION</Badge>;
+      }
+      if (actUpper.includes("CUSTOMER_PROTECTED") || actUpper.includes("PROTECT")) {
+        return <Badge variant="outline" className="text-[10px] text-indigo-600 border-indigo-300 dark:text-indigo-400 dark:border-indigo-700">CUSTOMER PROTECTED</Badge>;
+      }
+      if (actUpper.includes("DEFERRED") || actUpper.includes("WAIT")) {
+        return <Badge variant="warning" className="text-[10px]">DEFERRED</Badge>;
+      }
+      if (actUpper.includes("UNRESOLVED")) {
+        return <Badge variant="outline" className="text-[10px] text-slate-500">UNRESOLVED</Badge>;
+      }
       return <Badge variant="success" className="text-[10px]">INDEPENDENT VERIFIED</Badge>;
     }
     return <Badge variant="outline" className="text-[10px]">AUDIT</Badge>;

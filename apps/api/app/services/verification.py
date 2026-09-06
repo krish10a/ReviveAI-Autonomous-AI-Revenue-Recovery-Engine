@@ -203,6 +203,9 @@ class IndependentVerificationService:
                 elif act_type_str == "wait":
                     unresolved_action_name = "VERIFY_RECOVERY_DEFERRED"
                     msg = "Recovery attempt deferred due to bank outage or degradation."
+                elif act_type_str == "escalate":
+                    unresolved_action_name = "VERIFY_ESCALATION_STATUS"
+                    msg = "Verification Status: Pending Human Resolution. Handed off to human ops; no automated recovery recorded."
                 else:
                     unresolved_action_name = "VERIFY_RECOVERY_UNRESOLVED"
                     msg = "Action did not achieve verified fund capture. Escalated or pending replanning."

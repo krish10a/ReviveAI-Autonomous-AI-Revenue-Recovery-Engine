@@ -20,6 +20,13 @@ import {
 } from "lucide-react";
 
 interface OverviewMetrics {
+  total_failed_payment_value?: number;
+  policy_actionable_value?: number;
+  policy_actionable_cases?: number;
+  actionable_recovery_rate_percent?: number;
+  cohort_recovery_ratio_percent?: number;
+  remaining_unrecovered_value?: number;
+  policy_intervention_events?: number;
   revenue_at_risk: number;
   eligible_revenue: number;
   revenue_recovered: number;
@@ -60,38 +67,36 @@ interface ExperimentResults {
   metadata: {
     label: string;
     population: string;
-    methodology?: string;
+    methodology: string;
+    seed: number;
     sample_size_per_group: number;
-    seed?: number;
   };
   control_group: {
     strategy: string;
     eligible_revenue: number;
     recovered_revenue: number;
-    recovered_cases?: number;
+    recovered_cases: number;
     recovery_rate_percent: number;
     action_cost: number;
-    cost_per_thousand_recovered?: number;
+    cost_per_thousand_recovered: number;
   };
   ai_group: {
     strategy: string;
     eligible_revenue: number;
     recovered_revenue: number;
-    recovered_cases?: number;
+    recovered_cases: number;
     recovery_rate_percent: number;
     action_cost: number;
-    cost_per_thousand_recovered?: number;
+    cost_per_thousand_recovered: number;
     policy_denials: number;
     wait_decisions: number;
   };
   impact_metrics: {
     recovery_lift_percent: number;
-    recovery_lift_percentage_points?: number;
-    relative_lift_percent?: number;
+    recovery_lift_percentage_points: number;
+    relative_lift_percent: number;
     incremental_revenue_recovered: number;
     net_incremental_revenue: number;
-    ai_cost_per_rupee_recovered: number;
-    ai_cost_per_thousand_recovered?: number;
   };
 }
 
@@ -123,40 +128,40 @@ const BENCHMARK_SCENARIOS = [
     key: "SCENARIO_3_OPTED_OUT",
     title: "Customer Opt-Out: Zero Contact",
     tag: "Compliance",
-    tagVariant: "warning" as const,
+    tagVariant: "destructive" as const,
     amount: 1999,
-    failureReason: "Insufficient Funds",
-    bank: "State Bank of India",
-    recAction: "Generate Payment Link",
-    aiReason: "ML recommended payment link to allow self-serve balance top-up",
-    policyOutcome: "DENIED (Customer Opt-Out Flag = True)",
-    policyRule: "Customer Communication Opt-Out Barrier",
-    policyObserved: "opted_out = True",
-    policyThreshold: "Zero automated communication allowed",
-    finalDecision: "STOP",
-    executorCapability: "STOP only — SMS/Email dispatch strictly blocked",
-    verifierResult: "CUSTOMER_PROTECTED (0 messages dispatched)",
+    failureReason: "Customer Unsubscribed / Opted Out",
+    bank: "SBI",
+    recAction: "Payment Link Proposed",
+    aiReason: "Recommendation proposed customer email link based on 88% model score",
+    policyOutcome: "DENIED (Opt-Out Guardrail Triggered)",
+    policyRule: "Zero-Harassment Opt-Out Guardrail",
+    policyObserved: "Customer opted_out = true",
+    policyThreshold: "Zero exceptions allowed",
+    finalDecision: "STOP (Hard Suppression)",
+    executorCapability: "Zero comms dispatched — customer protected",
+    verifierResult: "CUSTOMER_PROTECTED (Zero Contact)",
     recoveredAmount: 0,
     actionCost: 0,
-    detail: "Customer has opted out of automated communications. Policy immediately suppressed messaging, preventing harassment."
+    detail: "Policy blocked customer contact on opted-out profile. Zero communications dispatched."
   },
   {
     id: 1,
     key: "SCENARIO_1_RECOVERABLE",
-    title: "Recoverable: Timed Smart Retry",
-    tag: "Recovery",
+    title: "Transient Failure: Smart Retry",
+    tag: "Autonomous Recovery",
     tagVariant: "success" as const,
     amount: 2499,
-    failureReason: "Insufficient Funds",
+    failureReason: "BAD_REQUEST_INSUFFICIENT_FUNDS",
     bank: "HDFC Bank",
-    recAction: "Retry Later (p=85%)",
-    aiReason: "High tenure customer (365d) with 96% historical success; morning salary window",
-    policyOutcome: "APPROVED (All Guardrails Satisfied)",
-    policyRule: "Healthy Bank Gateway + Within Retry Limit (<3)",
-    policyObserved: "Retry attempt = 1, Amount < ₹10,000",
-    policyThreshold: "All statutory and risk checks passed",
+    recAction: "Retry Proposed (Window: 08:30-10:00)",
+    aiReason: "ML predicted 69.5% recovery probability in morning salary window based on transaction patterns",
+    policyOutcome: "APPROVED (All Guardrails Passed)",
+    policyRule: "Within retry limit & quiet hours cleared",
+    policyObserved: "Attempt 1 of 3, hour 09:15 within merchant window",
+    policyThreshold: "Max 3 retries, cooldown 2h",
     finalDecision: "RETRY (Optimal Window)",
-    executorCapability: "Scheduled API retry via Razorpay gateway",
+    executorCapability: "Gateway API execution mode: simulation",
     verifierResult: "VERIFIED_SUCCESS (Payment Captured)",
     recoveredAmount: 2499,
     actionCost: 0.50,
@@ -179,10 +184,10 @@ const BENCHMARK_SCENARIOS = [
     policyThreshold: "₹10,000 maximum automated ceiling",
     finalDecision: "ESCALATE (Human Ops)",
     executorCapability: "Enqueue to Merchant Ops Desk for human review",
-    verifierResult: "ESCALATED_UNRESOLVED (Pending Supervisor)",
+    verifierResult: "PENDING HUMAN RESOLUTION",
     recoveredAmount: 0,
     actionCost: 0,
-    detail: "Amount exceeds merchant automated ceiling of ₹10,000. Forced human supervisor review."
+    detail: "Amount exceeds merchant automated ceiling of ₹10,000. Handed off to human ops; no automated recovery recorded."
   }
 ];
 
@@ -322,111 +327,122 @@ export default function Dashboard() {
 
       {/* A. Executive KPI Layer (6 Reconciled Cards) */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-        {/* 1. Revenue at Risk */}
-        <MetricCard title="Total unresolved payment value currently exposed to recovery.">
-          <MetricLabel>Revenue at Risk</MetricLabel>
-          <MetricValue>₹{(metrics?.revenue_at_risk ?? 0).toLocaleString()}</MetricValue>
+        {/* 1. Total Failed Payment Value */}
+        <MetricCard title="Total gross failed payment volume across all failed payment cases in the operational cohort.">
+          <MetricLabel>Total Failed Payment Value</MetricLabel>
+          <MetricValue>₹{(metrics?.total_failed_payment_value ?? metrics?.eligible_revenue ?? 0).toLocaleString()}</MetricValue>
           <MetricTrend>
-            <span className="text-slate-500 font-medium">Open failed-payment value</span>
+            <span className="text-slate-500 font-medium">{metrics?.total_cases ?? 0} failed payment cases</span>
           </MetricTrend>
         </MetricCard>
 
-        {/* 2. Eligible Recovery Value (Denominator) */}
-        <MetricCard title="Total payment volume considered for recovery (denominator for Recovery Rate).">
-          <MetricLabel>Eligible Recovery Value</MetricLabel>
+        {/* 2. Policy-Actionable Value */}
+        <MetricCard title="Total payment volume permitted through the deterministic policy layer for recovery action.">
+          <MetricLabel>Policy-Actionable Value</MetricLabel>
           <MetricValue className="text-blue-600 dark:text-blue-400">
-            ₹{(metrics?.eligible_revenue ?? 0).toLocaleString()}
+            ₹{(metrics?.policy_actionable_value ?? metrics?.eligible_revenue ?? 0).toLocaleString()}
           </MetricValue>
           <MetricTrend>
-            <span className="text-slate-500 font-medium">Recoverable payment volume</span>
+            <span className="text-slate-500 font-medium">
+              {metrics?.policy_actionable_cases ?? (metrics?.total_cases ?? 0) - (metrics?.policy_denials_count ?? 0)} cases permitted for recovery action
+            </span>
           </MetricTrend>
         </MetricCard>
 
-        {/* 3. Revenue Recovered */}
+        {/* 3. Verified Revenue Recovered */}
         <MetricCard title="Value recorded in the verified recovery ledger after successful recovery verification.">
-          <MetricLabel>Revenue Recovered</MetricLabel>
+          <MetricLabel>Verified Revenue Recovered</MetricLabel>
           <MetricValue className="text-emerald-600 dark:text-emerald-400">
             ₹{(metrics?.revenue_recovered ?? 0).toLocaleString()}
           </MetricValue>
           <MetricTrend>
-            <TrendUp>Verified recovery</TrendUp>
+            <TrendUp>{metrics?.recovered_cases_count ?? 0} independently verified recoveries</TrendUp>
           </MetricTrend>
         </MetricCard>
 
-        {/* 4. Recovery Rate */}
-        <MetricCard title="Verified recovered value divided by eligible recovery value.">
-          <MetricLabel>Recovery Rate</MetricLabel>
-          <MetricValue>{metrics?.recovery_rate_percent ?? 0}%</MetricValue>
+        {/* 4. Actionable Recovery Rate */}
+        <MetricCard title="Verified recovery divided by policy-actionable value.">
+          <MetricLabel>Actionable Recovery Rate</MetricLabel>
+          <MetricValue>{metrics?.actionable_recovery_rate_percent ?? metrics?.recovery_rate_percent ?? 0}%</MetricValue>
           <MetricTrend>
-            <span className="text-slate-500 font-medium">of eligible value</span>
+            <span className="text-slate-500 font-medium">Verified recovery / policy-actionable value</span>
           </MetricTrend>
         </MetricCard>
 
-        {/* 5. Policy Blocks */}
-        <MetricCard title="Number of proposed recovery actions rejected by deterministic policy guardrails.">
-          <MetricLabel>Policy Blocks</MetricLabel>
+        {/* 5. Remaining Unrecovered Value */}
+        <MetricCard title="Open or unresolved value after autonomous recovery activity.">
+          <MetricLabel>Remaining Unrecovered Value</MetricLabel>
           <MetricValue className="text-amber-600 dark:text-amber-400">
-            {metrics?.policy_denials_count ?? 0}
+            ₹{(metrics?.remaining_unrecovered_value ?? metrics?.revenue_at_risk ?? 0).toLocaleString()}
           </MetricValue>
           <MetricTrend>
-            <ShieldCheck className="w-4 h-4 mr-1 text-amber-500 inline" />
-            <span className="text-slate-500 font-medium">Unsafe actions prevented</span>
+            <span className="text-slate-500 font-medium">Open value after recovery activity</span>
           </MetricTrend>
         </MetricCard>
 
-        {/* 6. Total Action Cost */}
-        <MetricCard title="Simulated operational cost of recovery actions divided by verified recovered value.">
-          <MetricLabel>Total Action Cost</MetricLabel>
-          <MetricValue>₹{(metrics?.recovery_cost ?? 0).toFixed(2)}</MetricValue>
+        {/* 6. Policy Intervention Events */}
+        <MetricCard title="Total policy intervention events preventing unsafe, restricted, or non-compliant actions.">
+          <MetricLabel>Policy Intervention Events</MetricLabel>
+          <MetricValue className="text-purple-600 dark:text-purple-400">
+            {metrics?.policy_intervention_events ?? metrics?.policy_denials_count ?? 0}
+          </MetricValue>
           <MetricTrend>
-            <span className="text-slate-500 font-medium">
-              ₹{costPerThousand} per ₹1,000 recovered
-            </span>
+            <ShieldCheck className="w-4 h-4 mr-1 text-purple-500 inline" />
+            <span className="text-slate-500 font-medium">Unsafe or restricted actions prevented</span>
           </MetricTrend>
         </MetricCard>
       </div>
 
       {/* B. "What Happened?" Operational Summary Strip */}
       <div className="p-4 rounded-xl bg-slate-100/80 dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-        <div className="flex flex-wrap items-center justify-between gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="flex items-center gap-2">
             <Layers className="w-4 h-4 text-indigo-600" />
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
-              Operational Summary:
-            </span>
+            <div>
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 block">
+                Operational Summary
+              </span>
+              <span className="text-[11px] text-slate-500 block">
+                Policy intervention count is event-based; a case may trigger multiple policy evaluations during its lifecycle.
+              </span>
+            </div>
           </div>
           <div className="flex flex-wrap items-center gap-6 text-xs">
             <div>
               <span className="text-slate-500 block text-[10px] uppercase font-bold">Failed Payments</span>
-              <span className="font-bold text-slate-800 dark:text-slate-200">{metrics?.total_cases ?? 0}</span>
+              <span className="font-bold text-slate-800 dark:text-slate-200">{metrics?.total_cases ?? 0} cases</span>
             </div>
             <div>
-              <span className="text-slate-500 block text-[10px] uppercase font-bold">Eligible</span>
-              <span className="font-bold text-slate-800 dark:text-slate-200">{metrics?.total_cases ?? 0}</span>
+              <span className="text-slate-500 block text-[10px] uppercase font-bold">Policy-Actionable</span>
+              <span className="font-bold text-blue-600 dark:text-blue-400">
+                {metrics?.policy_actionable_cases ?? (metrics?.total_cases ?? 0) - (metrics?.policy_denials_count ?? 0)} cases
+              </span>
             </div>
             <div>
-              <span className="text-slate-500 block text-[10px] uppercase font-bold">Recovered</span>
+              <span className="text-slate-500 block text-[10px] uppercase font-bold">Verified Recovered</span>
               <span className="font-bold text-emerald-600 dark:text-emerald-400">
                 ₹{(metrics?.revenue_recovered ?? 0).toLocaleString()} ({metrics?.recovered_cases_count ?? 0} cases)
               </span>
             </div>
             <div>
-              <span className="text-slate-500 block text-[10px] uppercase font-bold">Policy Blocked</span>
-              <span className="font-bold text-amber-600 dark:text-amber-400">{metrics?.policy_denials_count ?? 0}</span>
+              <span className="text-slate-500 block text-[10px] uppercase font-bold">Policy Intervention Events</span>
+              <span className="font-bold text-amber-600 dark:text-amber-400">
+                {metrics?.policy_intervention_events ?? metrics?.policy_denials_count ?? 0} events
+              </span>
             </div>
             <div>
               <span className="text-slate-500 block text-[10px] uppercase font-bold">Deferred (WAIT)</span>
-              <span className="font-bold text-indigo-600 dark:text-indigo-400">{metrics?.wait_decisions_count ?? 0}</span>
+              <span className="font-bold text-indigo-600 dark:text-indigo-400">{metrics?.wait_decisions_count ?? 0} events</span>
             </div>
             <div>
               <span className="text-slate-500 block text-[10px] uppercase font-bold">Escalated (Human Ops)</span>
-              <span className="font-bold text-slate-700 dark:text-slate-300">{metrics?.escalated_cases_count ?? 0}</span>
+              <span className="font-bold text-slate-700 dark:text-slate-300">{metrics?.escalated_cases_count ?? 0} events</span>
             </div>
           </div>
         </div>
       </div>
 
-      {/* C. Operational Funnel & D. Action Mix */}
+      {/* C. Operational Recovery Funnel & D. Action Mix */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Operational Funnel (2 cols on lg) */}
         <Card className="lg:col-span-2 border-slate-200 dark:border-slate-800">
@@ -446,11 +462,11 @@ export default function Dashboard() {
           <CardContent>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
               {(metrics?.funnel ?? [
-                { stage: "Failed Payments", count: metrics?.total_cases ?? 0, amount: metrics?.eligible_revenue ?? 0 },
-                { stage: "Diagnosed", count: metrics?.total_cases ?? 0, amount: metrics?.eligible_revenue ?? 0 },
-                { stage: "Recovery Eligible", count: metrics?.total_cases ?? 0, amount: metrics?.eligible_revenue ?? 0 },
-                { stage: "Recovery Action Allowed", count: (metrics?.total_cases ?? 0) - (metrics?.policy_denials_count ?? 0), amount: metrics?.eligible_revenue ?? 0 },
-                { stage: "Recovery Action Executed", count: metrics?.recovered_cases_count ?? 0, amount: metrics?.eligible_revenue ?? 0 },
+                { stage: "Failed Payments", count: metrics?.total_cases ?? 0, amount: metrics?.total_failed_payment_value ?? metrics?.eligible_revenue ?? 0 },
+                { stage: "Diagnosed", count: metrics?.total_cases ?? 0, amount: metrics?.total_failed_payment_value ?? metrics?.eligible_revenue ?? 0 },
+                { stage: "Policy-Actionable", count: metrics?.policy_actionable_cases ?? (metrics?.total_cases ?? 0) - (metrics?.policy_denials_count ?? 0), amount: metrics?.policy_actionable_value ?? metrics?.eligible_revenue ?? 0 },
+                { stage: "Recovery Action Allowed", count: metrics?.policy_actionable_cases ?? (metrics?.total_cases ?? 0) - (metrics?.policy_denials_count ?? 0), amount: metrics?.policy_actionable_value ?? metrics?.eligible_revenue ?? 0 },
+                { stage: "Recovery Action Executed", count: metrics?.policy_actionable_cases ?? metrics?.recovered_cases_count ?? 0, amount: metrics?.policy_actionable_value ?? metrics?.eligible_revenue ?? 0 },
                 { stage: "Independently Verified Recovery", count: metrics?.recovered_cases_count ?? 0, amount: metrics?.revenue_recovered ?? 0 },
               ]).map((st, idx) => (
                 <div
@@ -484,7 +500,7 @@ export default function Dashboard() {
           <CardHeader className="pb-3">
             <CardTitle className="text-base font-bold flex items-center gap-2">
               <Scale className="w-4 h-4 text-indigo-600" />
-              AI Proposal → Final Action
+              AI Proposal → Final Policy Outcome
             </CardTitle>
             <CardDescription className="text-xs">
               Event counts across case lifecycles; one case may generate multiple proposals during replanning.
@@ -492,16 +508,16 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="p-2.5 rounded-lg bg-blue-50/60 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900 text-[11px] font-medium text-blue-900 dark:text-blue-200 text-center">
-              AI Proposal Events → Final Execution Events. (Proposal events may exceed case count because a case can be replanned).
+              AI Proposal Events → Final Policy Outcomes. (Proposal events may exceed case count because replanning can occur).
             </div>
 
             <div className="space-y-2 text-xs">
               {[
-                { name: "Smart Retry", key: "retry", aiKey: "retry" },
-                { name: "Payment Link", key: "generate_payment_link", aiKey: "generate_payment_link" },
-                { name: "Safe Deferral (WAIT)", key: "wait", aiKey: "wait" },
-                { name: "Suppress Action (STOP)", key: "stop", aiKey: "stop" },
-                { name: "Human Escalation", key: "escalate", aiKey: "escalate" },
+                { name: "Smart Retry", key: "retry", aiKey: "retry", suffix: "Retry" },
+                { name: "Payment Link", key: "generate_payment_link", aiKey: "generate_payment_link", suffix: "Executed" },
+                { name: "Safe Deferral (WAIT)", key: "wait", aiKey: "wait", suffix: "WAIT" },
+                { name: "Suppress Action (STOP)", key: "stop", aiKey: "stop", suffix: "STOP" },
+                { name: "Human Escalation", key: "escalate", aiKey: "escalate", suffix: "ESCALATE" },
               ].map((act) => {
                 const proposedCount = metrics?.action_mix?.proposed?.[act.aiKey] ?? 0;
                 const approvedCount = metrics?.action_mix?.approved?.[act.key] ?? 0;
@@ -514,7 +530,7 @@ export default function Dashboard() {
                       </span>
                       <span className="text-slate-400">→</span>
                       <span className="font-mono text-emerald-600 dark:text-emerald-400">
-                        Final Execution Events: <strong>{approvedCount}</strong>
+                        Final Outcomes: <strong>{approvedCount} {act.suffix}</strong>
                       </span>
                     </div>
                   </div>
@@ -532,10 +548,10 @@ export default function Dashboard() {
             <ShieldCheck className="w-5 h-5 text-amber-600 dark:text-amber-400" />
             <div>
               <CardTitle className="text-base font-bold text-slate-900 dark:text-slate-100">
-                Active Policy Guardrails & Statutory Safety Barriers
+                Active Policy Guardrails & Safety Controls
               </CardTitle>
               <CardDescription className="text-xs">
-                Hard deterministic barriers evaluated before any recovery action can touch banking infrastructure.
+                Deterministic controls enforcing customer preferences, transaction safety, merchant-defined risk limits, and operational constraints before any recovery action can proceed.
               </CardDescription>
             </div>
           </div>
@@ -704,12 +720,20 @@ export default function Dashboard() {
               <p className="text-xs text-slate-500 mt-1">{selectedScenario.executorCapability}</p>
             </div>
 
-            {/* Step 4: Verification */}
+            {/* Step 4: Verification Status */}
             <div className="p-3 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 block">
-                Step 4 — Verification
+              <span className={`text-[10px] font-bold uppercase tracking-wider block ${
+                selectedScenario.key === "SCENARIO_4_HIGH_VALUE"
+                  ? "text-amber-600 dark:text-amber-400"
+                  : "text-emerald-600 dark:text-emerald-400"
+              }`}>
+                Step 4 — Verification Status
               </span>
-              <p className="text-sm font-bold text-emerald-600 dark:text-emerald-400 mt-1">
+              <p className={`text-sm font-bold mt-1 ${
+                selectedScenario.key === "SCENARIO_4_HIGH_VALUE"
+                  ? "text-amber-600 dark:text-amber-400"
+                  : "text-emerald-600 dark:text-emerald-400"
+              }`}>
                 {selectedScenario.verifierResult}
               </p>
               <p className="text-xs text-slate-500 mt-1">
@@ -768,13 +792,13 @@ export default function Dashboard() {
               <h5 className="font-bold text-slate-800 dark:text-slate-200">Experiment Methodology & Controls</h5>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-slate-600 dark:text-slate-400">
                 <div>
-                  <strong>Population:</strong> 100 synthetic failed payments with realistic failure distributions (insufficient funds, expired cards, bank outages, auth failures).
+                  <strong>Population:</strong> 100 synthetic failed payments with realistic failure distributions (50 Control vs 50 ReviveAI cases).
                 </div>
                 <div>
                   <strong>Treatment Isolation:</strong> Fixed pseudo-random seed = 42 ensures exact reproducible cohort characteristics across runs.
                 </div>
                 <div>
-                  <strong>Metric Definitions:</strong> Recovery Rate Difference is reported in absolute percentage points. Action costs reflect actual SMS/payment link API charges.
+                  <strong>Metric Definitions & Costs:</strong> Recovery Rate Difference is reported in absolute percentage points. Note: Controlled-experiment costs and operational cohort costs are separate measurements.
                 </div>
               </div>
             </div>
@@ -784,7 +808,7 @@ export default function Dashboard() {
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4 pt-2">
             {/* Control */}
             <div className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-              <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Control Group (Static Retry)</span>
+              <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Control Group (Static Retry • 50 Cases)</span>
               <p className="text-2xl font-bold text-slate-700 dark:text-slate-300 mt-1">
                 {experiment?.control_group?.recovery_rate_percent ?? 0}%
               </p>
@@ -798,7 +822,7 @@ export default function Dashboard() {
 
             {/* ReviveAI */}
             <div className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-emerald-300 dark:border-emerald-800">
-              <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">ReviveAI Group (Closed-Loop)</span>
+              <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">ReviveAI Group (Closed-Loop • 50 Cases)</span>
               <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400 mt-1">
                 {experiment?.ai_group?.recovery_rate_percent ?? 0}%
               </p>
@@ -850,15 +874,15 @@ export default function Dashboard() {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 pt-1 text-[11px] leading-relaxed">
           <div>
             <strong className="text-slate-700 dark:text-slate-300 block">Operational Data:</strong>
-            Synthetic payment and recovery data persisted in PostgreSQL. Denominator is strictly eligible recovery value.
+            Synthetic payment and recovery data persisted in PostgreSQL. Policy-actionable recovery value reflects permitted actions. Operational cohort costs and controlled-experiment costs are separate measurements.
           </div>
           <div>
             <strong className="text-slate-700 dark:text-slate-300 block">Machine Learning:</strong>
-            Action-conditioned model predicts recovery probability conditioned on action type. Zero unvalidated direct executions.
+            Action-conditioned model predicts recovery probability conditioned on action type. No AI proposal can directly trigger payment infrastructure. Every action passes deterministic policy evaluation and bounded execution controls.
           </div>
           <div>
             <strong className="text-slate-700 dark:text-slate-300 block">Policy Barrier:</strong>
-            Deterministic statutory code guardrails enforce hard stops, outage deferrals, and high-value supervisor escalations.
+            Deterministic policy controls enforce hard stops, outage deferrals, and high-value supervisor escalations before any recovery action can proceed.
           </div>
           <div>
             <strong className="text-slate-700 dark:text-slate-300 block">Financial Ledger:</strong>

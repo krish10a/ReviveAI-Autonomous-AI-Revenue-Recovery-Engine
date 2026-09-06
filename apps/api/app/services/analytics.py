@@ -96,10 +96,23 @@ class LiveAnalyticsService:
             cost_per_rupee = (recovery_cost / revenue_recovered) if revenue_recovered > 0 else 0.0
             cost_per_thousand = (recovery_cost / revenue_recovered * 1000.0) if revenue_recovered > 0 else 0.0
 
-            # 6. Operational Funnel
             approved_cases = db.query(func.count(func.distinct(RecoveryAction.case_id))).filter(
                 RecoveryAction.status.in_([RecoveryActionStatus.APPROVED, RecoveryActionStatus.EXECUTED, RecoveryActionStatus.VERIFIED])
             ).scalar() or 0
+
+            policy_actionable_cases = approved_cases
+            policy_actionable_value = float(db.query(
+                func.coalesce(func.sum(RecoveryCase.amount), 0)
+            ).filter(
+                RecoveryCase.id.in_(
+                    db.query(RecoveryAction.case_id).filter(
+                        RecoveryAction.status.in_([RecoveryActionStatus.APPROVED, RecoveryActionStatus.EXECUTED, RecoveryActionStatus.VERIFIED])
+                    )
+                )
+            ).scalar() or 0.0)
+
+            actionable_recovery_rate = min(100.0, (revenue_recovered / policy_actionable_value * 100.0)) if policy_actionable_value > 0 else 0.0
+            cohort_recovery_ratio = min(100.0, (revenue_recovered / eligible_revenue * 100.0)) if eligible_revenue > 0 else 0.0
 
             executed_cases = db.query(func.count(func.distinct(RecoveryAction.case_id))).filter(
                 RecoveryAction.status.in_([RecoveryActionStatus.EXECUTED, RecoveryActionStatus.VERIFIED])
@@ -108,9 +121,9 @@ class LiveAnalyticsService:
             funnel = [
                 {"stage": "Failed Payments", "count": total_cases, "amount": round(eligible_revenue, 2)},
                 {"stage": "Diagnosed", "count": total_cases, "amount": round(eligible_revenue, 2)},
-                {"stage": "Recovery Eligible", "count": total_cases, "amount": round(eligible_revenue, 2)},
-                {"stage": "Recovery Action Allowed", "count": approved_cases, "amount": round(eligible_revenue * (approved_cases / total_cases if total_cases > 0 else 0), 2)},
-                {"stage": "Recovery Action Executed", "count": executed_cases, "amount": round(eligible_revenue * (executed_cases / total_cases if total_cases > 0 else 0), 2)},
+                {"stage": "Policy-Actionable", "count": approved_cases, "amount": round(policy_actionable_value, 2)},
+                {"stage": "Recovery Action Allowed", "count": approved_cases, "amount": round(policy_actionable_value, 2)},
+                {"stage": "Recovery Action Executed", "count": executed_cases, "amount": round(policy_actionable_value, 2)},
                 {"stage": "Independently Verified Recovery", "count": recovered_cases, "amount": round(revenue_recovered, 2)},
             ]
 
@@ -174,10 +187,17 @@ class LiveAnalyticsService:
             ]
 
             return {
+                "total_failed_payment_value": round(eligible_revenue, 2),
+                "policy_actionable_value": round(policy_actionable_value, 2),
+                "policy_actionable_cases": approved_cases,
+                "actionable_recovery_rate_percent": round(actionable_recovery_rate, 2),
+                "cohort_recovery_ratio_percent": round(cohort_recovery_ratio, 2),
+                "remaining_unrecovered_value": round(revenue_at_risk, 2),
+                "policy_intervention_events": int(policy_denials),
                 "revenue_at_risk": round(revenue_at_risk, 2),
                 "eligible_revenue": round(eligible_revenue, 2),
                 "revenue_recovered": round(revenue_recovered, 2),
-                "recovery_rate_percent": round(recovery_rate, 2),
+                "recovery_rate_percent": round(actionable_recovery_rate, 2),
                 "active_cases": active_cases,
                 "total_cases": total_cases,
                 "recovered_cases_count": recovered_cases,
