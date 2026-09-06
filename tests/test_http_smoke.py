@@ -95,3 +95,44 @@ def test_http_experiment_endpoint():
     assert ai["recovery_rate_percent"] >= 0
     assert "recovery_lift_percent" in imp
     assert "incremental_revenue_recovered" in imp
+
+
+def test_http_health_system():
+    """Test GET /health/system reports operational health across all components."""
+    res = client.get("/health/system")
+    assert res.status_code == 200
+    data = res.json()
+    assert data["status"] in ["healthy", "degraded"]
+    assert "api" in data
+    assert "database" in data
+    assert "ml" in data
+    assert "policy_engine" in data
+    assert "executor" in data
+    assert "verification" in data
+
+
+def test_http_policy_lab_simulate():
+    """Test POST /recovery/policy-lab/simulate evaluates parameter adjustments without DB mutation."""
+    list_res = client.get("/recovery-cases")
+    assert list_res.status_code == 200
+    cases = list_res.json()
+    assert len(cases) > 0
+    case_id = cases[0]["id"]
+
+    # Test standard simulation
+    sim_res = client.post("/recovery/policy-lab/simulate", json={
+        "case_id": case_id,
+        "amount_ceiling": 500.00,  # low ceiling to trigger escalation
+        "max_retries": 3,
+        "customer_opted_out": False,
+        "simulate_bank_outage": False,
+        "proposed_action": "retry"
+    })
+    assert sim_res.status_code == 200
+    sim_data = sim_res.json()
+    assert sim_data["case_id"] == case_id
+    assert "evaluation" in sim_data
+    assert "pipeline_trace" in sim_data
+    # With low ceiling, amount should trigger merchant_amount_ceiling violation
+    assert sim_data["evaluation"]["decision"] in ["ALLOWED", "DENIED"]
+

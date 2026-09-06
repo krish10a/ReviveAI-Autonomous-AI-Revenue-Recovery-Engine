@@ -1,224 +1,279 @@
-# ReviveAI — Autonomous AI Revenue Recovery Engine
+# ReviveAI
 
+Autonomous AI Revenue Recovery Engine
+
+[![ReviveAI CI](https://github.com/krish10a/ReviveAI-Autonomous-AI-Revenue-Recovery-Engine/actions/workflows/ci.yml/badge.svg)](https://github.com/krish10a/ReviveAI-Autonomous-AI-Revenue-Recovery-Engine/actions)
 [![Python Version](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12-blue.svg)](https://www.python.org/)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.100%2B-009688.svg)](https://fastapi.tiangolo.com/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.104%2B-009688.svg)](https://fastapi.tiangolo.com/)
 [![Next.js](https://img.shields.io/badge/Next.js-16%20Turbopack-black.svg)](https://nextjs.org/)
-[![Tests](https://img.shields.io/badge/tests-42%20passed%20%7C%20100%25-brightgreen.svg)](https://docs.pytest.org/)
+[![Tests](https://img.shields.io/badge/tests-54%20passed%20%7C%20100%25-brightgreen.svg)](https://docs.pytest.org/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-> **ReviveAI** is a production-grade, closed-loop autonomous revenue recovery system for recurring billing and payment failures.
-
-Instead of naive blind retries or passive customer spam, ReviveAI combines **action-conditioned calibrated machine learning**, an **impassable deterministic policy engine**, **bounded execution**, and **independent financial verification** to maximize net revenue recovery while strictly preventing harassment, bank penalty spams, and unauthorized merchant actions.
+> **Failed payment → diagnosis → ML prediction → deterministic policy → bounded action → independent verification → financial ledger.**
 
 ---
 
-## 📐 System Architecture
+## What ReviveAI Does
 
-```
-                                  [ Razorpay Webhook Ingestion ]
-                                                │
-                                                ▼
-                                    [ HMAC Signature & Lock ]
-                                                │
-                                                ▼
-                                    [ Failure Diagnosis Engine ]
-                                                │
-                                                ▼
-                            [ Action-Conditioned ML Predictor ]
-                        Calculates P(recovery | state, action) & EV
-                                                │
-                                                ▼
-                             ⚠️ [ DETERMINISTIC POLICY BARRIER ] ⚠️
-                           Enforces Merchant Limits, Bank Outages,
-                             Quiet Hours, Opt-Outs & Ceilings
-                                                │
-                                                ▼
-                                    [ Bounded Action Executor ]
-                                 Strict Enums, Simulation/Live
-                                                │
-                                                ▼
-                                 [ Independent Verification ]
-                               Confirms Real Movement of Funds
-                                                │
-                                                ▼
-                                    [ Append-Only Ledger ]
-                            Net Recovery = Gross Amount - Costs
-```
+ReviveAI is an autonomous, policy-governed revenue recovery engine designed for recurring payments and failed transaction lifecycles. Instead of naive blind retries that exhaust card limits and incur gateway penalties, or intrusive customer messaging that causes churn, ReviveAI orchestrates a closed-loop recovery workflow:
+
+1. **Failure Diagnosis**: Automatically inspects raw gateway decline codes and maps them to standard failure taxonomy (transient network glitch, insufficient funds, expired card, bank gateway outage, risk block).
+2. **Action-Conditioned ML**: Evaluates recovery probabilities across candidate recovery actions ($P(\text{recovery} \mid \text{action})$) using calibrated probabilistic models.
+3. **Deterministic Policy Barrier**: Subject every AI proposal to hard business, statutory, and safety guardrails (customer opt-out, bank health outage detection, quiet hours, retry caps, and high-value amount ceilings).
+4. **Bounded Execution**: Safely dispatches strictly typed, pre-approved action primitives through sandboxed execution runners.
+5. **Independent Verification**: Validates payment settlement through independent proof sources—never trusting executor self-reports.
+6. **Auditable Financial Ledger**: Writes double-entry accounting records with itemized action costs and net recovered revenue ($\text{Net} = \text{Gross} - \text{Cost}$).
 
 ---
 
-## 🌟 Key Architecture Pillars
+## Core Architecture
 
-### 1. Secure Ingestion & State Machine Integrity
-* **Webhook Authentication**: Razorpay webhook ingestion with raw-body HMAC SHA-256 signature verification.
-* **Strict Idempotency**: Distributed locking via `X-Razorpay-Event-Id` prevents duplicate processing.
-* **State Machine Monotonicity**: Late or out-of-order `payment.failed` events are rejected if state is already `payment.captured`.
+![ReviveAI System Architecture](docs/architecture.svg)
 
-### 2. Action-Conditioned Calibrated ML Pipeline
-* **Probabilistic Scoring**: Predicts calibrated recovery probability $P(\text{recovery} \mid \text{state}, \text{action})$ across candidate actions (`retry_now`, `retry_later`, `payment_link`, `notification`, `escalate`, `wait`).
-* **Expected Net Value (EV) Optimization**:
-  $$E[\text{Net Recovery}] = P(\text{recovery} \mid s, a) \times \text{Amount} - \text{Cost}(a)$$
-* **Feature Engineering (`ml/features/features.py`)**: Standardized numeric features (amounts, customer tenure, history, bank failure rates) + one-hot encoded categorical features.
-* **Calibrated Classification**: `CalibratedClassifierCV` ensures output probabilities reliably match true empirical recovery frequencies (ROC-AUC `0.6415`, PR-AUC `0.6586`, Brier Loss `0.2237`).
+```
+Payment Failure
+       ↓
+Failure Diagnosis
+       ↓
+Action-Conditioned ML Prediction
+       ↓
+AI Proposal
+       ↓
+Deterministic Policy Engine
+    ↙      ↓      ↘
+  STOP   WAIT   ESCALATE
+    ↓
+Bounded Executor
+       ↓
+Independent Verification
+       ↓
+Financial Ledger
+       ↓
+Audit Trail
+```
 
-### 3. Impassable Deterministic Policy Engine (Guardrail Barrier)
-* **Zero Direct ML/LLM Execution**: ML models propose actions; the policy engine has final veto power.
-* **Hard Merchant Guardrails**:
-  - **Bank Outage Detection**: Real-time rolling failure rate monitoring per bank (e.g. Kotak outage forces `WAIT` and suppresses retries).
-  - **Customer Opt-Out**: Strict zero-contact policy enforcement.
-  - **Retry Limits & Cooldowns**: Enforces retry attempt caps and minimum interval gaps.
-  - **Night Quiet Hours**: Blocks customer-facing communications between 21:00 and 08:00 local merchant time.
-  - **High-Value Ceilings**: Mandatory human escalation for high-value transactions (> ₹25,000).
+### The Core Architectural Principle
+> **AI proposes. Policy decides. Executor acts. Verification proves.**
 
-### 4. Bounded Execution Environment
-* Strictly typed action enums (`RecoveryActionType`) prevent arbitrary payload generation.
-* Dual execution modes: `simulation` (deterministic demo) and `test_live` (real Razorpay test-mode API integration).
-
-### 5. Independent Verification & Financial Ledger
-* **Trust Nothing**: Never relies solely on executor return status.
-* **Verification Engine**: Verifies actual movement of funds via webhook receipts or ground-truth provider state.
-* **Immutable Accounting**: Append-only entries written to `RecoveryLedger` with itemized action costs and exact net recovered amounts ($Net = Gross - Cost$).
-
-### 6. Control vs. AI Cohort Experimentation & Analytics
-* Live PostgreSQL-backed metrics: Revenue at risk, recovered amount, net recovery, cost per rupee recovered, escalation rate, and policy denials.
-* Controlled experiment framework demonstrating **+52 percentage points absolute recovery lift** (+₹63,100+ net value created per 1,000 cases).
+No machine learning model or LLM agent can directly trigger payment gateway transactions. The deterministic policy engine retains absolute veto authority over all actions.
 
 ---
 
-## 📊 Benchmark & Multi-Seed Experiment Results
+## Why It Is Different
 
-Evaluated across a 5-run controlled synthetic benchmark (600 held-out test cases per run):
-
-| Run | Strategy | Recovery Rate | Incremental Lift | Net Revenue Recovered |
-| :--- | :--- | :--- | :--- | :--- |
-| **Control** | Static Gateway Retry | `14.0%` | Baseline | ₹25,609.80 |
-| **ReviveAI** | Action-Conditioned AI Pipeline | **`66.0%`** | **`+52.0 pp`** | **`₹165,812.11`** |
-
-### Probability Calibration Bins
-
-| Predicted Probability Bin | Observed Empirical Recovery Rate |
-| :---: | :---: |
-| `0.180` | `0.000` |
-| `0.302` | `0.243` |
-| `0.524` | `0.604` |
-| `0.668` | `0.661` |
+| Capability | Traditional Dunning & Gateway Retries | ReviveAI Closed-Loop Engine |
+|---|---|---|
+| **Recovery Strategy** | Static retries at arbitrary hours | Action-conditioned calibrated ML ($P(\text{recovery} \mid \text{action})$) |
+| **Bank Outages** | Repeats retries into failing bank, locking cards | Rolling failure rate monitor forces **`WAIT`** until gateway recovers |
+| **Customer Protection** | Continues spamming opted-out customers | Impassable zero-harassment guardrail enforces **`STOP`** |
+| **High-Value Risk** | Blindly auto-charges large ticket amounts | Enforces **`ESCALATE`** to human operations above merchant ceiling |
+| **Execution Safety** | Open-ended scripts with side-effects | Strictly typed, bounded action enums (`RETRY`, `PAYMENT_LINK`, `WAIT`, `STOP`, `ESCALATE`) |
+| **Proof of Settlement** | Assumes executor API success = recovered | Independent verification validates ground-truth capture |
+| **Financial Accounting** | Approximate top-line estimates | Immutable append-only ledger tracking Gross, Action Cost, and Net |
 
 ---
 
-## ⚡ Quickstart Guide
+## Demo Benchmark Metrics
 
-### Prerequisites
-- **Python**: 3.10 – 3.12
-- **Node.js**: 18+
-- **Database**: PostgreSQL 15+ or SQLite (local testing)
-- **Cache/Queue**: Redis 7+
+Values derived deterministically from the canonical 8-scenario benchmark walkthrough (`scripts/reset_demo.py`):
 
-### 1. Installation & Environment Setup
-```bash
-# Clone the repository
-git clone https://github.com/krish10a/ReviveAI-Autonomous-AI-Revenue-Recovery-Engine.git
-cd ReviveAI-Autonomous-AI-Revenue-Recovery-Engine/revive-ai
+* **Total Failed Payment Value**: ₹77,897.00 across 8 failed payment cases
+* **Policy-Actionable Value**: ₹3,798.00 (2 cases permitted for autonomous recovery)
+* **Verified Revenue Recovered**: ₹3,798.00 (2 independently verified recoveries)
+* **Actionable Recovery Rate**: 100.0% (Verified recovery / Policy-actionable value)
+* **Remaining Unrecovered Value**: ₹74,099.00 (Open value after protective policy stops)
+* **Policy Intervention Events**: 7 safety interventions (preventing customer harassment, bank retry storms, and high-value auto-charging)
+* **Recovery Action Cost**: ₹2.50 total (₹0.66 per ₹1,000 recovered)
+* **Net Revenue Recovered**: ₹3,795.50
+* **Operational Summary**: WAIT = 1, ESCALATE = 2 (reconciles with Action Mix)
 
-# Create environment configuration
-cp .env.example .env
-```
-
-### 2. Database Migrations & Seeding
-```bash
-# Run database migrations
-alembic upgrade head
-
-# Reset and seed the pristine 8-scenario demo dataset
-python -m simulations.reset_demo
-```
-
-### 3. Run the Winning Demo Walkthrough
-Execute the end-to-end judge demonstration script covering all 8 benchmark scenarios:
-
-```bash
-python -m simulations.run_winning_demo
-```
+### Source-of-Truth Invariants
+ReviveAI strictly enforces financial accounting and monotonic invariants across the database:
+* $\text{Actionable Value} \ge \text{Executed Value} \ge \text{Verified Value}$
+* $\text{Actionable Cases} \ge \text{Executed Cases} \ge \text{Verified Cases}$
+* Monotonic funnel progression across all 6 stages
+* Verified ledger gross equals analytics revenue recovered
 
 ---
 
-## 🧪 Automated Test Suite
+## Controlled Business Impact Experiment
 
-Run the full pytest suite (42 unit, integration, and invariant tests):
+To isolate treatment efficacy, ReviveAI includes a randomized controlled experiment running across an identical synthetic population of failed payments (50 Control vs 50 ReviveAI, fixed seed = 42):
 
-```bash
-pytest tests/ -v
-```
-
-### Test Coverage Summary:
-- **`tests/test_webhook.py`**: HMAC SHA-256 signature verification, invalid signature rejection, idempotency locking, out-of-order event protection.
-- **`tests/test_policy.py`**: Bank outage detection, customer opt-out block, retry limits, amount ceilings, night quiet hours.
-- **`tests/test_ml.py`**: Synthetic data generator, model training, calibrated prediction probabilities, deterministic reproducibility, adverse context behavior.
-- **`tests/test_executor_verification.py`**: Action enum enforcement, execution mode logging, independent verification ledger generation.
-- **`tests/test_analytics.py`**: Overview metrics, failure reason breakdown, Control vs. AI cohort evaluation.
-- **`tests/test_invariants.py`**: Policy veto invariants, monotonic state transitions, duplicate recovery prevention.
-- **`tests/test_e2e_scenarios.py`**: End-to-end closed-loop scenario validation.
+| Metric | Control Group (Static Retry) | ReviveAI (Closed-Loop Pipeline) | Difference / Business Lift |
+|---|:---:|:---:|:---:|
+| **Sample Size** | 50 cases | 50 cases | Identical cohort |
+| **Eligible Revenue** | ₹128,049.00 | ₹149,022.13 | Replay evaluation |
+| **Recovery Rate** | **20.0%** | **62.0%** | **+42.0 percentage points** |
+| **Relative Improvement** | Baseline | **+210.0% relative lift** | **3.1× higher recovery** |
+| **Recovered Revenue** | ₹25,609.80 | ₹92,393.72 | **+₹66,783.92 gross lift** |
+| **Action Execution Cost** | ₹25.00 | ₹34.00 | Efficient targeting |
+| **Cost per ₹1,000 Recovered** | ₹0.98 | ₹0.37 | **62% lower recovery cost** |
+| **Net Incremental Value** | Baseline | **+₹66,749.92** | Pure bottom-line margin |
 
 ---
 
-## 💻 Running the Services Locally
+## Safety Model & Guardrail Rules
 
-### Backend API (FastAPI)
-```bash
-# Start backend API server on http://localhost:8000
-python -m uvicorn apps.api.app.main:app --host 127.0.0.1 --port 8000 --reload
-```
+ReviveAI implements 8 deterministic policy guardrails in `apps/api/app/services/policy.py`:
 
-- **Interactive API Documentation**: [http://localhost:8000/docs](http://localhost:8000/docs)
-- **Health Check Endpoint**: [http://localhost:8000/health](http://localhost:8000/health)
-
-### Frontend Dashboard (Next.js 16)
-```bash
-cd apps/web
-npm install
-npm run dev
-```
-
-- **Dashboard UI**: [http://localhost:3000](http://localhost:3000)
+1. **Customer Opt-Out**: Immediate hard block (`STOP`). Zero emails, SMS, or payment links dispatched.
+2. **Bank Outage & Degradation**: Real-time rolling failure rate analysis across bank gateways. If failure rate > 30%, retries are blocked and system forces **`WAIT`**.
+3. **Merchant Amount Ceiling**: Transactions exceeding merchant limit (e.g. ₹10,000) are blocked from automated charging and commanded to **`ESCALATE`** to human operations.
+4. **Night Quiet Hours**: Customer contact actions are blocked between 21:00 and 08:00 local merchant time.
+5. **Retry Attempt Limits**: Strict cap (maximum 3 retries within cooldown window) to prevent card issuer penalty blocks.
+6. **Communication Cooldown**: Minimum 2-hour spacing between customer communications.
+7. **Double-Charge Protection**: If payment status is already `CAPTURED`, execution instantly commands `STOP`.
+8. **Case Expiry**: Disallows action on cases older than 48 hours.
 
 ---
 
-## 📂 Project Directory Structure
+## Tech Stack
+
+* **Backend & API**: Python 3.12, FastAPI, Pydantic v2, Uvicorn
+* **Database & ORM**: PostgreSQL (SQLite supported for local CI), SQLAlchemy 2.0, Alembic
+* **Machine Learning**: Scikit-learn (`CalibratedClassifierCV`, `LogisticRegression`), NumPy, Pandas
+* **Frontend Dashboard**: Next.js 16 (App Router, Turbopack), React 19, TypeScript, Tailwind CSS, Lucide Icons
+* **Testing & CI**: Pytest, Pytest-Asyncio, HTTPX, GitHub Actions CI
+* **Payments Integration**: Razorpay API webhook ingestion with HMAC SHA-256 validation
+
+---
+
+## Project Structure
 
 ```
 revive-ai/
+├── .github/
+│   └── workflows/
+│       └── ci.yml               # GitHub Actions CI (Backend tests + Frontend build)
 ├── apps/
-│   ├── api/                     # FastAPI Modular Backend
+│   ├── api/                     # FastAPI Backend Application
 │   │   ├── app/
-│   │   │   ├── models/          # SQLAlchemy ORM (Payment, RecoveryCase, RecoveryLedger)
+│   │   │   ├── models/          # SQLAlchemy ORM Models (Payment, RecoveryCase, RecoveryLedger)
 │   │   │   ├── routers/         # Webhook, Recovery, Analytics, Timeline, Simulation
-│   │   │   ├── schemas/         # Pydantic validation schemas
+│   │   │   ├── schemas/         # Pydantic Request/Response Models
 │   │   │   ├── services/        # PolicyEngine, Executor, Verification, Prediction, Analytics
-│   │   │   └── main.py          # FastAPI application entrypoint
-│   │   └── requirements.txt
-│   └── web/                     # Next.js 16 Dashboard (Turbopack + Tailwind CSS)
+│   │   │   └── main.py          # FastAPI Application Entrypoint & Health Endpoints
+│   │   └── requirements.txt     # Python Dependencies
+│   └── web/                     # Next.js 16 Web Dashboard
 │       └── src/
-│           ├── app/             # Next.js App Router pages
-│           └── components/      # Metrics, Audit Timeline, Decision Explainer, Batch Simulator
+│           ├── app/             # Next.js App Router Pages
+│           └── components/      # Dashboard, AuditTimeline, DecisionExplainer, MetricCard
 ├── database/
-│   ├── alembic/                 # Alembic Database Migrations
+│   ├── alembic/                 # Database Migrations
 │   └── seed/                    # Deterministic Demo Seeding (8 canonical scenarios)
+├── docs/
+│   ├── architecture.svg         # SVG Architecture Diagram
+│   ├── architecture.md          # Architectural Technical Specification
+│   ├── demo.md                  # Demo & Reproducibility Guide
+│   ├── demo_script.md           # 5-Minute Judge Presentation Script
+│   └── evaluation.md            # ML Model Evaluation & Calibration Report
 ├── ml/
-│   ├── datasets/                # Action-conditioned dataset generator
-│   ├── features/                # ColumnTransformer & feature extraction
-│   ├── training/                # CalibratedClassifierCV training
-│   ├── evaluation/              # Metrics JSON, classification report, calibration tables
-│   └── models/                  # Serialized calibrated model artifacts
+│   ├── datasets/                # Action-Conditioned Dataset Generator
+│   ├── features/                # ColumnTransformer & Feature Extraction
+│   ├── training/                # Model Training Script
+│   ├── evaluation/              # Model Evaluation Results & Calibration Bins
+│   └── models/                  # Calibrated Model Pickles & Metadata
+├── scripts/
+│   └── reset_demo.py            # Single-command deterministic demo reset & verifier
 ├── simulations/
-│   ├── reset_demo.py            # Pristine demo state reset script
-│   └── run_winning_demo.py      # End-to-end 8-scenario judge demonstration
-├── tests/                       # 42-test automated pytest suite
-├── docker-compose.yml           # Production container composition
-├── README.md                    # Project documentation
-└── LICENSE                      # MIT License
+│   ├── reset_demo.py            # Environment initialization
+│   └── run_winning_demo.py      # 8-Scenario Canonical Recovery Pipeline Runner
+├── tests/                       # 54-Test Pytest Suite (Invariants, Policy, ML, Webhook, HTTP)
+├── Makefile                     # Root developer make targets (make demo, make test, make build)
+└── README.md                    # Project Engineering Showcase
 ```
 
 ---
 
-## 📜 License
+## Getting Started
 
-Distributed under the MIT License. See `LICENSE` for more information.
+### 1. Prerequisites
+* Python 3.10 – 3.12
+* Node.js 18+ and npm
+* PostgreSQL (or SQLite local fallback)
+
+### 2. Setup
+```bash
+# Clone the repository
+git clone https://github.com/krish10a/ReviveAI-Autonomous-AI-Revenue-Recovery-Engine.git
+cd ReviveAI-Autonomous-AI-Revenue-Recovery-Engine
+
+# Setup environment variables
+cp .env.example .env
+
+# Install backend dependencies
+pip install -r apps/api/requirements.txt
+
+# Install frontend dependencies
+cd apps/web && npm install && cd ../..
+```
+
+### 3. Reset Demo Environment (Deterministic Known State)
+```bash
+# Single command: Cleans DB, seeds canonical scenarios, runs winning demo pipeline, verifies invariants
+python scripts/reset_demo.py
+# Or using make:
+make demo
+```
+
+### 4. Run Development Servers
+```bash
+# Terminal 1: Backend API (FastAPI)
+cd apps/api && uvicorn app.main:app --reload --port 8000
+
+# Terminal 2: Frontend Dashboard (Next.js)
+cd apps/web && npm run dev
+```
+
+Open [http://localhost:3000](http://localhost:3000) in your browser.
+
+---
+
+## Testing
+
+Run the full automated test suite (54 unit, invariant, HTTP smoke, and policy tests):
+
+```bash
+pytest tests/ -v
+# Or using make:
+make test
+```
+
+Build the production web frontend:
+```bash
+cd apps/web && npm run build
+# Or using make:
+make build
+```
+
+---
+
+## Documented API Endpoints
+
+### System & Health
+* `GET /health` — Basic service liveness check
+* `GET /health/db` — Database connection check (`SELECT 1`)
+* `GET /health/system` — Comprehensive operational health check across API, Database, ML model, Policy Engine, Executor, and Verification
+
+### Analytics & Reporting
+* `GET /analytics/overview` — Live operational overview, monotonic funnel metrics, reconciled action mix, and active guardrail states
+* `GET /analytics/failure-reason` — Empirical recovery breakdown by failure code taxonomy
+* `GET /analytics/intervention-performance` — Performance metrics by recovery intervention type
+* `POST /analytics/experiment` — Randomized, deterministic Control vs. AI cohort experiment (n=100, seed=42)
+
+### Recovery Cases & Decision Replay
+* `GET /recovery-cases` — List recovery cases with pagination
+* `GET /recovery-cases/{id}` — Retrieve recovery case detail
+* `GET /recovery-cases/{id}/timeline` — Retrieve chronological audit events for case replay
+* `POST /recovery/policy-lab/simulate` — Interactive Policy Lab sandbox (test amount ceiling, bank outages, opt-out without financial execution)
+
+### Ingestion & Simulation
+* `POST /api/webhook/razorpay` — Ingest raw payment gateway failure events with HMAC SHA-256 signature verification
+* `POST /api/simulate/batch` — Generate synthetic operational cases through the full closed-loop pipeline
+
+---
+
+## Synthetic Data Disclosure
+
+> **Synthetic Demo Environment**: All payment records, customer profiles, bank degradation events, and recovery transactions in this demonstration repository are synthetic. No real customer funds, live payment credentials, or production merchant accounts are processed.

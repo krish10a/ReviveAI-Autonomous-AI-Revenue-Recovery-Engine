@@ -1,0 +1,59 @@
+name: ReviveAI CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  backend-tests:
+    name: Backend Tests & Invariant Checks
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Check out repository
+      uses: actions/checkout@v4
+
+    - name: Set up Python 3.12
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+        cache: "pip"
+
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r apps/api/requirements.txt
+
+    - name: Run Test Suite & Invariants
+      env:
+        DATABASE_URL: "sqlite:///./test_ci.db"
+        ENVIRONMENT: "test"
+      run: |
+        pytest tests/ -v
+
+  frontend-build:
+    name: Frontend Production Build
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Check out repository
+      uses: actions/checkout@v4
+
+    - name: Set up Node.js 20
+      uses: actions/setup-node@v4
+      with:
+        node-version: 20
+        cache: "npm"
+        cache-dependency-path: apps/web/package-lock.json
+
+    - name: Install npm dependencies
+      run: |
+        cd apps/web
+        npm ci
+
+    - name: Run Next.js Production Build
+      run: |
+        cd apps/web
+        npm run build

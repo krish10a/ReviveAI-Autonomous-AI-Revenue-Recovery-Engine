@@ -1,0 +1,249 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 780" width="100%" height="100%" style="background:#090d16; font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+  <defs>
+    <!-- Gradients -->
+    <linearGradient id="blueGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#3b82f6" />
+      <stop offset="100%" stop-color="#1d4ed8" />
+    </linearGradient>
+    <linearGradient id="purpleGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#8b5cf6" />
+      <stop offset="100%" stop-color="#6d28d9" />
+    </linearGradient>
+    <linearGradient id="amberGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f59e0b" />
+      <stop offset="100%" stop-color="#b45309" />
+    </linearGradient>
+    <linearGradient id="emeraldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#10b981" />
+      <stop offset="100%" stop-color="#047857" />
+    </linearGradient>
+    <linearGradient id="roseGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f43f5e" />
+      <stop offset="100%" stop-color="#be123c" />
+    </linearGradient>
+    <linearGradient id="cardGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#131c2e" />
+      <stop offset="100%" stop-color="#0f172a" />
+    </linearGradient>
+
+    <!-- Markers -->
+    <marker id="arrow" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1 L 8 5 L 0 9 z" fill="#64748b" />
+    </marker>
+    <marker id="arrowBlue" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1 L 8 5 L 0 9 z" fill="#38bdf8" />
+    </marker>
+    <marker id="arrowEmerald" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1 L 8 5 L 0 9 z" fill="#34d399" />
+    </marker>
+    <marker id="arrowRose" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1 L 8 5 L 0 9 z" fill="#f87171" />
+    </marker>
+    <marker id="arrowAmber" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1 L 8 5 L 0 9 z" fill="#fbbf24" />
+    </marker>
+
+    <!-- Filter for subtle drop shadow -->
+    <filter id="shadow" x="-5%" y="-5%" width="110%" height="115%">
+      <feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="#000000" flood-opacity="0.5"/>
+    </filter>
+  </defs>
+
+  <!-- Title Header -->
+  <text x="600" y="42" text-anchor="middle" font-size="22" font-weight="700" fill="#f8fafc" letter-spacing="0.5">REVIVEAI — AUTONOMOUS REVENUE RECOVERY ENGINE</text>
+  <text x="600" y="66" text-anchor="middle" font-size="13" font-weight="500" fill="#94a3b8" letter-spacing="1.5">CLOSED-LOOP FINTECH RECOVERY &amp; SAFETY ARCHITECTURE</text>
+
+  <!-- Main Pipeline Container -->
+  <rect x="40" y="90" width="1120" height="470" rx="16" fill="#0b1324" stroke="#1e293b" stroke-width="1.5" />
+  <text x="65" y="118" font-size="12" font-weight="700" fill="#64748b" letter-spacing="1">CORE OPERATIONAL PIPELINE</text>
+
+  <!-- ==================== STAGE 1: INGESTION ==================== -->
+  <g filter="url(#shadow)">
+    <rect x="65" y="140" width="140" height="110" rx="10" fill="url(#cardGrad)" stroke="#334155" stroke-width="1.5" />
+    <rect x="65" y="140" width="140" height="4" rx="2" fill="url(#blueGrad)" />
+    <text x="135" y="170" text-anchor="middle" font-size="13" font-weight="700" fill="#f1f5f9">1. Payment Failure</text>
+    <text x="135" y="192" text-anchor="middle" font-size="11" fill="#94a3b8">Webhook Ingestion</text>
+    <text x="135" y="208" text-anchor="middle" font-size="10" fill="#64748b">Signature Auth</text>
+    <text x="135" y="224" text-anchor="middle" font-size="10" fill="#38bdf8">Idempotency Guard</text>
+  </g>
+
+  <!-- Arrow 1 -> 2 -->
+  <path d="M 205 195 L 245 195" stroke="#475569" stroke-width="2" marker-end="url(#arrow)" />
+
+  <!-- ==================== STAGE 2: DIAGNOSIS ==================== -->
+  <g filter="url(#shadow)">
+    <rect x="245" y="140" width="145" height="110" rx="10" fill="url(#cardGrad)" stroke="#334155" stroke-width="1.5" />
+    <rect x="245" y="140" width="145" height="4" rx="2" fill="url(#blueGrad)" />
+    <text x="317" y="170" text-anchor="middle" font-size="13" font-weight="700" fill="#f1f5f9">2. Failure Diagnosis</text>
+    <text x="317" y="192" text-anchor="middle" font-size="11" fill="#94a3b8">Root Cause Taxonomy</text>
+    <text x="317" y="208" text-anchor="middle" font-size="10" fill="#64748b">Gateway Code Parser</text>
+    <text x="317" y="224" text-anchor="middle" font-size="10" fill="#38bdf8">Transient vs Hard Fault</text>
+  </g>
+
+  <!-- Arrow 2 -> 3 -->
+  <path d="M 390 195 L 430 195" stroke="#475569" stroke-width="2" marker-end="url(#arrow)" />
+
+  <!-- ==================== STAGE 3: ML PREDICTION ==================== -->
+  <g filter="url(#shadow)">
+    <rect x="430" y="140" width="155" height="110" rx="10" fill="url(#cardGrad)" stroke="#334155" stroke-width="1.5" />
+    <rect x="430" y="140" width="155" height="4" rx="2" fill="url(#purpleGrad)" />
+    <text x="507" y="170" text-anchor="middle" font-size="13" font-weight="700" fill="#f1f5f9">3. ML Predictor</text>
+    <text x="507" y="192" text-anchor="middle" font-size="11" fill="#c084fc">Action-Conditioned</text>
+    <text x="507" y="208" text-anchor="middle" font-size="10" fill="#94a3b8">P(recovery | action)</text>
+    <text x="507" y="224" text-anchor="middle" font-size="10" fill="#a855f7">Calibrated Probabilities</text>
+  </g>
+
+  <!-- Arrow 3 -> 4 -->
+  <path d="M 585 195 L 625 195" stroke="#475569" stroke-width="2" marker-end="url(#arrow)" />
+
+  <!-- ==================== STAGE 4: AGENT PROPOSAL ==================== -->
+  <g filter="url(#shadow)">
+    <rect x="625" y="140" width="145" height="110" rx="10" fill="url(#cardGrad)" stroke="#334155" stroke-width="1.5" />
+    <rect x="625" y="140" width="145" height="4" rx="2" fill="url(#purpleGrad)" />
+    <text x="697" y="170" text-anchor="middle" font-size="13" font-weight="700" fill="#f1f5f9">4. AI Proposal</text>
+    <text x="697" y="192" text-anchor="middle" font-size="11" fill="#94a3b8">Optimal Action Select</text>
+    <text x="697" y="208" text-anchor="middle" font-size="10" fill="#f43f5e">PROPOSED ONLY</text>
+    <text x="697" y="224" text-anchor="middle" font-size="10" fill="#fbbf24">Zero Direct Execution</text>
+  </g>
+
+  <!-- Arrow 4 -> 5 (Policy Engine) -->
+  <path d="M 770 195 L 810 195" stroke="#475569" stroke-width="2" marker-end="url(#arrow)" />
+
+  <!-- ==================== STAGE 5: POLICY ENGINE (CENTRAL BARRIER) ==================== -->
+  <g filter="url(#shadow)">
+    <rect x="810" y="130" width="320" height="235" rx="12" fill="#151d30" stroke="#f59e0b" stroke-width="2" stroke-dasharray="0" />
+    <rect x="810" y="130" width="320" height="6" rx="3" fill="url(#amberGrad)" />
+    <text x="970" y="158" text-anchor="middle" font-size="14" font-weight="800" fill="#fbbf24" letter-spacing="0.5">5. DETERMINISTIC POLICY ENGINE</text>
+    <text x="970" y="176" text-anchor="middle" font-size="11" font-weight="600" fill="#fde68a">HARD SAFETY BARRIER (AI Cannot Bypass)</text>
+
+    <!-- Guardrail list -->
+    <rect x="825" y="190" width="290" height="120" rx="8" fill="#0d1527" stroke="#334155" stroke-width="1" />
+    <text x="835" y="210" font-size="10.5" font-weight="600" fill="#f1f5f9">&#x2022; Customer Opt-Out:</text>
+    <text x="965" y="210" font-size="10.5" fill="#f87171">100% Zero-Contact Block</text>
+
+    <text x="835" y="230" font-size="10.5" font-weight="600" fill="#f1f5f9">&#x2022; Bank Outage Detect:</text>
+    <text x="965" y="230" font-size="10.5" fill="#fbbf24">Forced WAIT (rolling &gt;30%)</text>
+
+    <text x="835" y="250" font-size="10.5" font-weight="600" fill="#f1f5f9">&#x2022; Amount Ceiling:</text>
+    <text x="965" y="250" font-size="10.5" fill="#f43f5e">ESCALATE if &gt;&#x20B9;10,000</text>
+
+    <text x="835" y="270" font-size="10.5" font-weight="600" fill="#f1f5f9">&#x2022; Quiet Hours (21-08):</text>
+    <text x="965" y="270" font-size="10.5" fill="#fbbf24">Suppress Notifications</text>
+
+    <text x="835" y="290" font-size="10.5" font-weight="600" fill="#f1f5f9">&#x2022; Retry Limits / Captured:</text>
+    <text x="965" y="290" font-size="10.5" fill="#94a3b8">Max 3 retries / Anti-Double Charge</text>
+
+    <text x="970" y="340" text-anchor="middle" font-size="10" font-weight="600" fill="#94a3b8">Principle: AI Proposes &#x2192; Policy Decides</text>
+  </g>
+
+  <!-- ==================== POLICY BRANCHES ==================== -->
+  <!-- Branch 1: ALLOWED -> Executor -->
+  <path d="M 970 365 L 970 415 L 755 415" stroke="#10b981" stroke-width="2.5" marker-end="url(#arrowEmerald)" />
+  <rect x="860" y="403" width="90" height="22" rx="4" fill="#047857" />
+  <text x="905" y="418" text-anchor="middle" font-size="10" font-weight="700" fill="#ecfdf5">ALLOWED</text>
+
+  <!-- Branch 2: STOP -->
+  <path d="M 810 260 L 740 260 L 740 310" stroke="#f43f5e" stroke-width="2" marker-end="url(#arrowRose)" />
+  <rect x="695" y="310" width="90" height="42" rx="6" fill="#1e1520" stroke="#f43f5e" stroke-width="1.5" />
+  <text x="740" y="328" text-anchor="middle" font-size="11" font-weight="800" fill="#f87171">STOP</text>
+  <text x="740" y="342" text-anchor="middle" font-size="9" fill="#fda4af">Zero Action / Protect</text>
+
+  <!-- Branch 3: WAIT -->
+  <path d="M 810 320 L 795 320 L 795 365" stroke="#f59e0b" stroke-width="2" marker-end="url(#arrowAmber)" />
+  <rect x="750" y="365" width="90" height="42" rx="6" fill="#201a14" stroke="#f59e0b" stroke-width="1.5" />
+  <text x="795" y="383" text-anchor="middle" font-size="11" font-weight="800" fill="#fbbf24">WAIT</text>
+  <text x="795" y="397" text-anchor="middle" font-size="9" fill="#fde68a">Backoff Until Health</text>
+
+  <!-- Branch 4: ESCALATE (routes to Human Ops) -->
+  <path d="M 1130 260 L 1150 260 L 1150 645 L 895 645" stroke="#c084fc" stroke-width="2" marker-end="url(#arrow)" />
+  <rect x="1080" y="275" width="85" height="24" rx="4" fill="#581c87" />
+  <text x="1122" y="291" text-anchor="middle" font-size="10" font-weight="700" fill="#f5d0fe">ESCALATE</text>
+
+  <!-- ==================== STAGE 6: BOUNDED EXECUTOR ==================== -->
+  <g filter="url(#shadow)">
+    <rect x="585" y="380" width="170" height="110" rx="10" fill="url(#cardGrad)" stroke="#334155" stroke-width="1.5" />
+    <rect x="585" y="380" width="170" height="4" rx="2" fill="url(#blueGrad)" />
+    <text x="670" y="410" text-anchor="middle" font-size="13" font-weight="700" fill="#f1f5f9">6. Bounded Executor</text>
+    <text x="670" y="432" text-anchor="middle" font-size="11" fill="#94a3b8">Action Execution</text>
+    <text x="670" y="448" text-anchor="middle" font-size="10" fill="#64748b">Retry / Payment Link</text>
+    <text x="670" y="464" text-anchor="middle" font-size="10" fill="#38bdf8">Mode: Bounded Gateway</text>
+  </g>
+
+  <!-- Arrow 6 -> 7 -->
+  <path d="M 585 435 L 530 435" stroke="#475569" stroke-width="2" marker-end="url(#arrow)" />
+
+  <!-- ==================== STAGE 7: INDEPENDENT VERIFICATION ==================== -->
+  <g filter="url(#shadow)">
+    <rect x="345" y="380" width="185" height="110" rx="10" fill="url(#cardGrad)" stroke="#047857" stroke-width="1.5" />
+    <rect x="345" y="380" width="185" height="4" rx="2" fill="url(#emeraldGrad)" />
+    <text x="437" y="410" text-anchor="middle" font-size="13" font-weight="700" fill="#34d399">7. Verification</text>
+    <text x="437" y="432" text-anchor="middle" font-size="11" fill="#a7f3d0">Independent Proof Source</text>
+    <text x="437" y="448" text-anchor="middle" font-size="10" fill="#94a3b8">Non-Self-Reported State</text>
+    <text x="437" y="464" text-anchor="middle" font-size="10" fill="#6ee7b7">Dual-Key Validation</text>
+  </g>
+
+  <!-- Arrow 7 -> 8 -->
+  <path d="M 345 435 L 285 435" stroke="#475569" stroke-width="2" marker-end="url(#arrowEmerald)" />
+
+  <!-- ==================== STAGE 8: FINANCIAL LEDGER ==================== -->
+  <g filter="url(#shadow)">
+    <rect x="95" y="380" width="190" height="110" rx="10" fill="url(#cardGrad)" stroke="#047857" stroke-width="2" />
+    <rect x="95" y="380" width="190" height="4" rx="2" fill="url(#emeraldGrad)" />
+    <text x="190" y="410" text-anchor="middle" font-size="13" font-weight="800" fill="#34d399">8. Financial Ledger</text>
+    <text x="190" y="432" text-anchor="middle" font-size="11" fill="#ecfdf5">Double-Entry Accounting</text>
+    <text x="190" y="448" text-anchor="middle" font-size="10" fill="#94a3b8">Gross &#x2212; Cost = Net</text>
+    <text x="190" y="464" text-anchor="middle" font-size="10" fill="#6ee7b7">Immutable Audit Record</text>
+  </g>
+
+  <!-- ==================== SUPPORTING INFRASTRUCTURE ==================== -->
+  <rect x="40" y="580" width="1120" height="170" rx="16" fill="#080e1a" stroke="#1e293b" stroke-width="1.5" />
+  <text x="65" y="608" font-size="12" font-weight="700" fill="#64748b" letter-spacing="1">PERSISTENCE &amp; GOVERNANCE LAYER</text>
+
+  <!-- PostgreSQL Box -->
+  <g filter="url(#shadow)">
+    <rect x="65" y="625" width="230" height="105" rx="10" fill="url(#cardGrad)" stroke="#334155" stroke-width="1.5" />
+    <rect x="65" y="625" width="230" height="4" rx="2" fill="url(#blueGrad)" />
+    <text x="180" y="652" text-anchor="middle" font-size="13" font-weight="700" fill="#f1f5f9">PostgreSQL Relational DB</text>
+    <text x="180" y="674" text-anchor="middle" font-size="11" fill="#94a3b8">System of Record</text>
+    <text x="180" y="694" text-anchor="middle" font-size="10" fill="#64748b">ACID Transactions &#x2022; Strict FKs</text>
+    <text x="180" y="710" text-anchor="middle" font-size="10" fill="#38bdf8">Idempotency &amp; Unique Constraints</text>
+  </g>
+
+  <!-- Audit Log Box -->
+  <g filter="url(#shadow)">
+    <rect x="330" y="625" width="250" height="105" rx="10" fill="url(#cardGrad)" stroke="#334155" stroke-width="1.5" />
+    <rect x="330" y="625" width="250" height="4" rx="2" fill="url(#amberGrad)" />
+    <text x="455" y="652" text-anchor="middle" font-size="13" font-weight="700" fill="#f1f5f9">Audit Logs &amp; Timeline</text>
+    <text x="455" y="674" text-anchor="middle" font-size="11" fill="#fbbf24">Chronological Event Stream</text>
+    <text x="455" y="694" text-anchor="middle" font-size="10" fill="#94a3b8">actor, action, inputs, decision_data</text>
+    <text x="455" y="710" text-anchor="middle" font-size="10" fill="#fde68a">Every AI &amp; Policy Decision Replayable</text>
+  </g>
+
+  <!-- Human Ops Box -->
+  <g filter="url(#shadow)">
+    <rect x="615" y="625" width="280" height="105" rx="10" fill="url(#cardGrad)" stroke="#7c3aed" stroke-width="1.5" />
+    <rect x="615" y="625" width="280" height="4" rx="2" fill="url(#purpleGrad)" />
+    <text x="755" y="652" text-anchor="middle" font-size="13" font-weight="700" fill="#f1f5f9">Human Ops &amp; Escalation</text>
+    <text x="755" y="674" text-anchor="middle" font-size="11" fill="#c084fc">Exception Handling Console</text>
+    <text x="755" y="694" text-anchor="middle" font-size="10" fill="#94a3b8">High-Value (&gt;&#x20B9;10K) &#x2022; Fraud Review</text>
+    <text x="755" y="710" text-anchor="middle" font-size="10" fill="#e9d5ff">Manual Disposition Workflow</text>
+  </g>
+
+  <!-- Realtime Analytics Box -->
+  <g filter="url(#shadow)">
+    <rect x="930" y="625" width="205" height="105" rx="10" fill="url(#cardGrad)" stroke="#334155" stroke-width="1.5" />
+    <rect x="930" y="625" width="205" height="4" rx="2" fill="url(#emeraldGrad)" />
+    <text x="1032" y="652" text-anchor="middle" font-size="13" font-weight="700" fill="#f1f5f9">Analytics &amp; Experiment</text>
+    <text x="1032" y="674" text-anchor="middle" font-size="11" fill="#34d399">Deterministic Reconciliation</text>
+    <text x="1032" y="694" text-anchor="middle" font-size="10" fill="#94a3b8">Monotonic Funnel Metrics</text>
+    <text x="1032" y="710" text-anchor="middle" font-size="10" fill="#a7f3d0">50 vs 50 A/B Trial (Lift: +42%)</text>
+  </g>
+
+  <!-- Vertical sync connectors from DB / Audit to pipeline -->
+  <path d="M 180 580 L 180 495" stroke="#334155" stroke-width="1.5" stroke-dasharray="4 4" />
+  <path d="M 455 580 L 455 495" stroke="#334155" stroke-width="1.5" stroke-dasharray="4 4" />
+  <path d="M 1032 580 L 1032 370" stroke="#334155" stroke-width="1.5" stroke-dasharray="4 4" />
+
+  <!-- Footnote -->
+  <text x="600" y="768" text-anchor="middle" font-size="10.5" fill="#64748b">ReviveAI Closed-Loop Architecture &#x2022; Synthetic Demonstration Environment &#x2022; No Real Customer Funds Processed</text>
+</svg>

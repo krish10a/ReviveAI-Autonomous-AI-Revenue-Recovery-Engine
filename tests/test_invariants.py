@@ -299,3 +299,79 @@ def test_quiet_hours_boundary_conditions():
     t_0801 = time(8, 1)
     assert is_quiet_hours(t_0801) is False
 
+
+def test_dashboard_analytics_source_of_truth_invariants():
+    """
+    Verify core source-of-truth invariants required for demo and dashboard consistency:
+    - verified_value <= executed_value <= actionable_value
+    - verified_cases <= executed_cases <= actionable_cases
+    - Stage 6 <= Stage 5 <= Stage 4 <= Stage 3 <= Stage 2 <= Stage 1
+    - WAIT summary == WAIT final outcomes
+    - ESCALATE summary == ESCALATE final outcomes
+    - Ledger verified amount == analytics verified amount
+    - Dashboard analytics values come from one deterministic source of truth.
+    """
+    from apps.api.app.services.analytics import get_analytics_service
+    from sqlalchemy import func
+
+    db = SessionLocal()
+    try:
+        overview = get_analytics_service().get_recovery_overview()
+
+        # Invariant 1: verified_value <= executed_value <= actionable_value
+        funnel = overview["funnel"]
+        s1, s2, s3, s4, s5, s6 = funnel[0], funnel[1], funnel[2], funnel[3], funnel[4], funnel[5]
+
+        actionable_val = s3["amount"]
+        executed_val = s5["amount"]
+        verified_val = s6["amount"]
+
+        assert verified_val <= executed_val <= actionable_val, (
+            f"Value invariant broken: verified {verified_val} <= executed {executed_val} <= actionable {actionable_val}"
+        )
+
+        # Invariant 2: verified_cases <= executed_cases <= actionable_cases
+        actionable_cases = s3["count"]
+        executed_cases = s5["count"]
+        verified_cases = s6["count"]
+
+        assert verified_cases <= executed_cases <= actionable_cases, (
+            f"Cases invariant broken: verified {verified_cases} <= executed {executed_cases} <= actionable {actionable_cases}"
+        )
+
+        # Invariant 3: Stage 6 <= Stage 5 <= Stage 4 <= Stage 3 <= Stage 2 <= Stage 1
+        for i in range(len(funnel) - 1):
+            assert funnel[i]["count"] >= funnel[i + 1]["count"], (
+                f"Funnel count non-monotonic between {funnel[i]['stage']} ({funnel[i]['count']}) and {funnel[i+1]['stage']} ({funnel[i+1]['count']})"
+            )
+            assert funnel[i]["amount"] >= funnel[i + 1]["amount"], (
+                f"Funnel amount non-monotonic between {funnel[i]['stage']} ({funnel[i]['amount']}) and {funnel[i+1]['stage']} ({funnel[i+1]['amount']})"
+            )
+
+        # Invariant 4 & 5: WAIT and ESCALATE summary == final outcomes
+        wait_summary = overview["wait_decisions_count"]
+        wait_mix = overview["action_mix"]["approved"].get("wait", 0)
+        assert wait_summary == wait_mix, f"WAIT summary ({wait_summary}) != mix ({wait_mix})"
+
+        escalate_summary = overview["escalated_cases_count"]
+        escalate_mix = overview["action_mix"]["approved"].get("escalate", 0)
+        assert escalate_summary == escalate_mix, f"ESCALATE summary ({escalate_summary}) != mix ({escalate_mix})"
+
+        # Invariant 6: Ledger verified amount == analytics verified amount
+        active_actions = ["retry", "generate_payment_link"]
+        ledger_gross = db.query(func.coalesce(func.sum(RecoveryLedger.gross_amount), 0)).filter(
+            RecoveryLedger.recovery_action.in_(active_actions)
+        ).scalar() or 0.0
+
+        assert round(float(ledger_gross), 2) == round(float(overview["revenue_recovered"]), 2), (
+            f"Ledger verified gross ({ledger_gross}) != analytics revenue_recovered ({overview['revenue_recovered']})"
+        )
+
+        # Invariant 7: Remaining unrecovered value derived consistently: Total Failed - Verified Recovered
+        total_failed = overview["total_failed_payment_value"]
+        assert round(overview["remaining_unrecovered_value"], 2) == round(total_failed - overview["revenue_recovered"], 2)
+
+    finally:
+        db.close()
+
+
