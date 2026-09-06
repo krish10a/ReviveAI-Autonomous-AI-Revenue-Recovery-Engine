@@ -2,7 +2,7 @@
   "model_name": "ReviveAI_ActionConditionedPredictor",
   "version": "2.0.0",
   "algorithm": "CalibratedClassifierCV(LogisticRegression)",
-  "training_timestamp": "2026-09-06T13:06:22.063897+00:00",
+  "training_timestamp": "2026-09-06T13:15:37.372684+00:00",
   "training_seed": 42,
   "dataset_size": 3000,
   "train_samples": 2400,

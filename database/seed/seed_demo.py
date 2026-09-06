@@ -411,8 +411,8 @@ def seed_database():
             )
             db.add(policy_decision)
 
-            # Timeline event
-            timeline = TimelineEvent(
+            # Timeline event 1: Policy evaluation
+            timeline_policy = TimelineEvent(
                 case_id=recovery_case.id,
                 actor="ReviveAI::PolicyEngine",
                 action="EVALUATE_POLICY",
@@ -427,7 +427,69 @@ def seed_database():
                 }),
                 timestamp=datetime.now(timezone.utc) - timedelta(minutes=45),
             )
-            db.add(timeline)
+            db.add(timeline_policy)
+
+            # Additional lifecycle events per scenario type
+            if i == 0:  # SCENARIO_1_RECOVERABLE: Timed Smart Retry
+                action.status = RecoveryActionStatus.APPROVED
+            elif i == 1:  # SCENARIO_2_MULTI_STEP_RECOVERY: Retry failed -> Payment Link
+                action.status = RecoveryActionStatus.APPROVED
+            elif i == 3 or i == 7:  # SCENARIO_4_HIGH_VALUE & SCENARIO_8_HUMAN_ESCALATION: Escalate -> Human Queue
+                action.status = RecoveryActionStatus.EXECUTED
+                t_exec = TimelineEvent(
+                    case_id=recovery_case.id,
+                    actor="BoundedExecutor",
+                    action="EXECUTE_ESCALATE",
+                    input_json=json.dumps({"execution_mode": "simulation", "action_type": "escalate"}),
+                    decision_json=json.dumps({
+                        "message": "Case escalated to Human Operations Queue",
+                        "escalation_reason": action.reason
+                    }),
+                    timestamp=datetime.now(timezone.utc) - timedelta(minutes=30),
+                )
+                db.add(t_exec)
+
+                t_verif = TimelineEvent(
+                    case_id=recovery_case.id,
+                    actor="IndependentVerification",
+                    action="VERIFY_RECOVERY_UNRESOLVED",
+                    input_json=json.dumps({"action_id": action.id, "mode": "simulation"}),
+                    decision_json=json.dumps({
+                        "message": "Escalated to Human Operations Queue for manual supervisor review."
+                    }),
+                    timestamp=datetime.now(timezone.utc) - timedelta(minutes=15),
+                )
+                db.add(t_verif)
+
+            elif i == 4:  # SCENARIO_5_BANK_OUTAGE: Retry Denied -> Force WAIT
+                t_exec = TimelineEvent(
+                    case_id=recovery_case.id,
+                    actor="BoundedExecutor",
+                    action="EXECUTE_WAIT",
+                    input_json=json.dumps({"execution_mode": "simulation", "action_type": "wait"}),
+                    decision_json=json.dumps({
+                        "message": "WAIT state enqueued; recovery deferred for bank recovery window",
+                        "scheduled_at": (datetime.now(timezone.utc) + timedelta(minutes=60)).isoformat(),
+                        "reason": denied_reason
+                    }),
+                    timestamp=datetime.now(timezone.utc) - timedelta(minutes=30),
+                )
+                db.add(t_exec)
+
+            elif i == 5:  # SCENARIO_6_RETRY_LIMIT: Stop
+                action.status = RecoveryActionStatus.EXECUTED
+                t_exec = TimelineEvent(
+                    case_id=recovery_case.id,
+                    actor="BoundedExecutor",
+                    action="EXECUTE_STOP",
+                    input_json=json.dumps({"execution_mode": "simulation", "action_type": "stop"}),
+                    decision_json=json.dumps({
+                        "message": "Recovery lifecycle permanently stopped",
+                        "reason": "Max retries (3) exhausted"
+                    }),
+                    timestamp=datetime.now(timezone.utc) - timedelta(minutes=30),
+                )
+                db.add(t_exec)
 
             seeded_summary.append({
                 "scenario_index": i + 1,
@@ -444,7 +506,7 @@ def seed_database():
         print(f"Merchant ID: {merchant.id} ({merchant.merchant_reference})")
         print(f"Total Scenarios Seeded: {len(seeded_summary)}")
         for item in seeded_summary:
-            print(f"  [{item['scenario_index']}] {item['scenario_key']}: Case #{item['case_id']}, ₹{item['amount']:.2f}, {item['decision']}")
+            print(f"  [{item['scenario_index']}] {item['scenario_key']}: Case #{item['case_id']}, INR {item['amount']:.2f}, {item['decision']}")
         print("===================================================\n")
         return seeded_summary
     finally:
