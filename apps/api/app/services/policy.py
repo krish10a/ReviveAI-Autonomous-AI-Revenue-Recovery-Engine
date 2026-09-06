@@ -1,7 +1,7 @@
 """
 Policy engine service for ReviveAI.
 Acts as the strict, impassable hard barrier between AI proposals and execution.
-Enforces business rules, statutory compliance, customer protection, and bank health checks.
+Enforces business rules, risk governance, customer protection, and bank health checks.
 """
 
 import logging

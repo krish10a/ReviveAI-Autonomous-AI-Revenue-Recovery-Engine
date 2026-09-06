@@ -279,7 +279,7 @@ export default function AuditTimeline({ caseId, scenarioKey }: AuditTimelineProp
                       <strong>Decision:</strong> {isDenied ? "REJECTED proposed action" : "APPROVED action"}
                     </p>
                     <p className="text-slate-700 dark:text-slate-300">
-                      <strong>Guardrail Rule:</strong> {decObj?.rule_violations?.join(", ") || decObj?.reason || "Statutory & Risk Safety Check"}
+                      <strong>Guardrail Rule:</strong> {decObj?.rule_violations?.join(", ") || decObj?.reason || "Risk & Operational Safety Check"}
                     </p>
                     <p className="text-slate-600 dark:text-slate-400 text-[11px]">
                       <strong>Enforcement Principle:</strong> AI models generate probability proposals; deterministic code guardrails enforce invariant safety barriers before execution.

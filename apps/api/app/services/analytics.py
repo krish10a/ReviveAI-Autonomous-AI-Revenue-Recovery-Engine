@@ -210,13 +210,16 @@ class LiveAnalyticsService:
                 "escalate": int(escalated_count),
             }
 
-            # 8. Policy Guardrails Active Triggers
+            # 8. Policy Guardrails Active Triggers (All 8 Core Guardrails)
             all_decisions = db.query(PolicyDecision).all()
             opt_out_triggers = sum(1 for d in all_decisions if "opt" in (d.rule_name or "").lower() or "opt" in (d.reason or "").lower())
             bank_triggers = sum(1 for d in all_decisions if "bank" in (d.rule_name or "").lower() or "outage" in (d.reason or "").lower() or "degradation" in (d.reason or "").lower())
-            high_value_triggers = int(escalated_count)
+            high_value_triggers = sum(1 for d in all_decisions if "ceiling" in (d.rule_name or "").lower() or "ceiling" in (d.reason or "").lower() or "high_value" in (d.rule_name or "").lower()) or int(escalated_count)
+            quiet_hours_triggers = sum(1 for d in all_decisions if "quiet" in (d.rule_name or "").lower() or "night" in (d.rule_name or "").lower())
+            retry_limit_triggers = sum(1 for d in all_decisions if "max_retries" in (d.rule_name or "").lower() or ("retry" in (d.rule_name or "").lower() and d.result == PolicyDecisionResult.DENIED))
+            cooldown_triggers = sum(1 for d in all_decisions if "cooldown" in (d.rule_name or "").lower() or "cooldown" in (d.reason or "").lower())
             captured_triggers = sum(1 for d in all_decisions if "captured" in (d.rule_name or "").lower() or "captured" in (d.reason or "").lower())
-            retry_limit_triggers = sum(1 for d in all_decisions if "retry" in (d.rule_name or "").lower() and d.result == PolicyDecisionResult.DENIED)
+            expiry_triggers = sum(1 for d in all_decisions if "expired" in (d.rule_name or "").lower() or "closed" in (d.rule_name or "").lower() or "expired" in (d.reason or "").lower())
 
             policy_guardrails = [
                 {
@@ -227,31 +230,52 @@ class LiveAnalyticsService:
                     "status": "ACTIVE"
                 },
                 {
-                    "rule": "Bank Outage / Degradation",
+                    "rule": "Bank Outage & Degradation",
                     "prevents": "Retries during degraded bank gateway states",
                     "threshold": "Forced WAIT when rolling failure rate > 30%",
                     "triggered_count": bank_triggers,
                     "status": "ACTIVE"
                 },
                 {
-                    "rule": "High-Value Amount Ceiling",
+                    "rule": "Merchant Amount Ceiling",
                     "prevents": "Autonomous handling of excessive transaction values",
                     "threshold": "Forced ESCALATE to human ops above ₹10,000",
                     "triggered_count": high_value_triggers,
                     "status": "ACTIVE"
                 },
                 {
-                    "rule": "Retry Limit Protection",
+                    "rule": "Night Quiet Hours",
+                    "prevents": "Customer notifications during unsociable night hours",
+                    "threshold": "100% suppression between 21:00 and 08:00",
+                    "triggered_count": quiet_hours_triggers,
+                    "status": "ACTIVE"
+                },
+                {
+                    "rule": "Retry Attempt Limits",
                     "prevents": "Repeated retry attempts causing card issuer blocks",
                     "threshold": "Maximum 3 attempts within cooldown window",
                     "triggered_count": retry_limit_triggers,
                     "status": "ACTIVE"
                 },
                 {
-                    "rule": "Already Captured Guard",
+                    "rule": "Communication Cooldown",
+                    "prevents": "Repeated customer messages in quick succession",
+                    "threshold": "Enforces minimum 2-hour spacing between contact",
+                    "triggered_count": cooldown_triggers,
+                    "status": "ACTIVE"
+                },
+                {
+                    "rule": "Double-Charge Protection",
                     "prevents": "Duplicate recovery or double-charging captured payments",
-                    "threshold": "Instant STOP if status is CAPTURED",
+                    "threshold": "Instant STOP if payment is CAPTURED",
                     "triggered_count": captured_triggers,
+                    "status": "ACTIVE"
+                },
+                {
+                    "rule": "Case Expiry Horizon",
+                    "prevents": "Stale recovery attempts on ancient failure events",
+                    "threshold": "Automatic case closure after 48-hour window",
+                    "triggered_count": expiry_triggers,
                     "status": "ACTIVE"
                 }
             ]
@@ -262,6 +286,7 @@ class LiveAnalyticsService:
                 "policy_actionable_cases": policy_actionable_cases,
                 "actionable_recovery_rate_percent": round(actionable_recovery_rate, 2),
                 "cohort_recovery_ratio_percent": round(cohort_recovery_ratio, 2),
+                "overall_recovery_rate_percent": round(cohort_recovery_ratio, 2),
                 "remaining_unrecovered_value": round(remaining_unrecovered, 2),
                 "policy_intervention_events": int(policy_denials),
                 "revenue_at_risk": round(revenue_at_risk, 2),
