@@ -14,6 +14,7 @@ class RecoveryCase(Base):
     __tablename__ = "recovery_cases"
 
     id = Column(Integer, primary_key=True, index=True)
+    scenario_key = Column(String(100), nullable=True, index=True, unique=True)
     merchant_id = Column(Integer, ForeignKey("merchants.id"), nullable=False)
     customer_id = Column(Integer, ForeignKey("customers.id"), nullable=False)
     payment_id = Column(Integer, ForeignKey("payments.id"), nullable=False)

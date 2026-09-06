@@ -419,7 +419,7 @@ export default function Dashboard() {
             <h4 className="text-sm font-bold text-slate-800 dark:text-slate-200 mb-3">
               Case Lifecycle Audit Timeline
             </h4>
-            <AuditTimeline caseId={selectedScenario.id} />
+            <AuditTimeline caseId={selectedScenario.id} scenarioKey={selectedScenario.key} />
           </div>
         </CardContent>
       </Card>

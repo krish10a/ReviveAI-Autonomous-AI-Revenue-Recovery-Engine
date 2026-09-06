@@ -15,10 +15,11 @@ interface TimelineEvent {
 }
 
 interface AuditTimelineProps {
-  caseId: number;
+  caseId?: number;
+  scenarioKey?: string;
 }
 
-export default function AuditTimeline({ caseId }: AuditTimelineProps) {
+export default function AuditTimeline({ caseId, scenarioKey }: AuditTimelineProps) {
   const [events, setEvents] = useState<TimelineEvent[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -26,7 +27,10 @@ export default function AuditTimeline({ caseId }: AuditTimelineProps) {
     const fetchTimeline = async () => {
       try {
         setLoading(true);
-        const res = await fetch(`/api/timeline/case/${caseId}`);
+        const endpoint = scenarioKey
+          ? `/api/timeline/scenario/${scenarioKey}`
+          : `/api/timeline/case/${caseId}`;
+        const res = await fetch(endpoint);
         if (res.ok) {
           const data: TimelineEvent[] = await res.json();
           setEvents(data);
@@ -41,10 +45,10 @@ export default function AuditTimeline({ caseId }: AuditTimelineProps) {
       }
     };
 
-    if (caseId) {
+    if (scenarioKey || caseId) {
       fetchTimeline();
     }
-  }, [caseId]);
+  }, [caseId, scenarioKey]);
 
   if (loading) {
     return <div className="text-xs text-slate-500 py-4 animate-pulse">Loading audit trail...</div>;

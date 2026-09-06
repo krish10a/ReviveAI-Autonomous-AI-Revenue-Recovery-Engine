@@ -11,7 +11,9 @@ import time
 from decimal import Decimal
 from datetime import datetime, timezone
 
-# Add project root to sys.path
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from database.seed.seed_demo import seed_database
@@ -64,17 +66,22 @@ def run_winning_demo():
     # STEP 1: Execute Canonical Recovery Scenario (Recoverable Insufficient Funds)
     print_step("Step 1: AI Decision -> Policy Approved -> Bounded Execution -> Recovery -> Ledger")
     db = SessionLocal()
-    # Scenario 1 (Case #1 or recoverable case)
-    case_1 = db.query(RecoveryCase).join(Payment).filter(
-        Payment.error_description.contains("Recoverable failure")
+    # Scenario 1 (SCENARIO_1_RECOVERABLE)
+    case_1 = db.query(RecoveryCase).filter(
+        RecoveryCase.scenario_key == "SCENARIO_1_RECOVERABLE"
     ).first()
+    if not case_1:
+        case_1 = db.query(RecoveryCase).join(Payment).filter(
+            Payment.error_description.contains("Recoverable failure")
+        ).first()
+
     case_1_id = case_1.id
     case_1_amount = case_1.amount
     customer_name = case_1.customer.name
     merchant_obj = case_1.merchant
     db.commit()
 
-    print(f"  Target Case: #{case_1_id} | Amount: ₹{case_1_amount} | Customer: {customer_name}")
+    print(f"  Target Case: #{case_1_id} [{case_1.scenario_key}] | Amount: ₹{case_1_amount} | Customer: {customer_name}")
 
     # 1. Prediction
     pred_service = get_prediction_service()
@@ -84,7 +91,7 @@ def run_winning_demo():
     print(f"  [Source]: {best_action_data.get('source', 'calibrated_ml_model')}")
 
     # 2. Policy Barrier Check & Action Selection Integrity
-    action_enum = RecoveryActionType(best_action_name)
+    action_enum = RecoveryActionType.RETRY if best_action_name == "retry" else RecoveryActionType(best_action_name)
     policy_service = get_policy_engine_service()
     act = RecoveryAction(
         case_id=case_1_id,
@@ -119,11 +126,15 @@ def run_winning_demo():
     # STEP 2: Bank Outage Degradation -> Policy Barrier Overrides AI -> Forces WAIT
     print_step("Step 2: BEST JUDGE MOMENT — Bank Outage: AI Proposes Retry -> Policy Rejects -> Forces WAIT")
     db = SessionLocal()
-    case_outage = db.query(RecoveryCase).join(Payment).filter(
-        Payment.error_description.contains("Bank outage")
+    case_outage = db.query(RecoveryCase).filter(
+        RecoveryCase.scenario_key == "SCENARIO_5_BANK_OUTAGE"
     ).first()
+    if not case_outage:
+        case_outage = db.query(RecoveryCase).join(Payment).filter(
+            Payment.error_description.contains("Bank outage")
+        ).first()
 
-    print(f"  Target Case: #{case_outage.id} | Bank: {case_outage.payment.bank} | Amount: ₹{case_outage.amount}")
+    print(f"  Target Case: #{case_outage.id} [{case_outage.scenario_key}] | Bank: {case_outage.payment.bank} | Amount: ₹{case_outage.amount}")
 
     # AI Model recommends retry based on amount/history
     outage_action = RecoveryAction(
@@ -160,8 +171,13 @@ def run_winning_demo():
     # STEP 3: Customer Opt-Out Policy Block
     print_step("Step 3: Customer Opt-Out — Zero Harassment Guardrail")
     db = SessionLocal()
-    case_opt = db.query(RecoveryCase).join(Customer).filter(Customer.opted_out == True).first()
-    print(f"  Target Case: #{case_opt.id} | Customer: {case_opt.customer.name} (opted_out={case_opt.customer.opted_out})")
+    case_opt = db.query(RecoveryCase).filter(
+        RecoveryCase.scenario_key == "SCENARIO_3_OPTED_OUT"
+    ).first()
+    if not case_opt:
+        case_opt = db.query(RecoveryCase).join(Customer).filter(Customer.opted_out == True).first()
+
+    print(f"  Target Case: #{case_opt.id} [{case_opt.scenario_key}] | Customer: {case_opt.customer.name} (opted_out={case_opt.customer.opted_out})")
 
     notif_act = RecoveryAction(
         case_id=case_opt.id,
@@ -174,6 +190,20 @@ def run_winning_demo():
     print(f"  [Policy Barrier Check]: ALLOWED = {opt_pol['allowed']}")
     print(f"  [Rule Triggered]: {opt_pol['rule_violations']}")
     print(f"  [Protection Result]: Contact strictly blocked. Zero communications dispatched.")
+
+    # Execute terminal STOP for opted-out customer
+    stop_act = RecoveryAction(
+        case_id=case_opt.id,
+        action_type=RecoveryActionType.STOP,
+        reason=opt_pol['denied_reason'],
+        predicted_success_probability=0.0,
+        status=RecoveryActionStatus.PROPOSED,
+    )
+    db.add(stop_act)
+    db.commit()
+    db.refresh(stop_act)
+    stop_res = executor.execute_action(case_opt.id, stop_act, execution_mode="simulation")
+    print(f"  [Terminal Action Executed]: {stop_res['action_type'].upper()} - Lifecycle stopped.")
     db.close()
 
     # STEP 4: Closed-Loop Multi-Step Recovery (Action Fails -> Verification Fails -> Re-evaluate -> Success)

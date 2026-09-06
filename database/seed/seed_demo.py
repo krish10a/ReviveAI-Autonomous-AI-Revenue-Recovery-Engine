@@ -331,6 +331,7 @@ def seed_database():
                 case_status = RecoveryCaseStatus.STOPPED
 
             recovery_case = RecoveryCase(
+                scenario_key=sc["key"],
                 payment_id=payment.id,
                 merchant_id=merchant.id,
                 customer_id=customer.id,
@@ -357,6 +358,17 @@ def seed_database():
             )
             db.add(diagnosis)
 
+            # Timeline event 1: Failure Diagnosis
+            t_diag = TimelineEvent(
+                case_id=recovery_case.id,
+                actor="diagnosis_service",
+                action="diagnose_failure",
+                input_json=json.dumps({"failure_code": payment.error_code, "amount": str(payment.amount)}),
+                decision_json=json.dumps({"failure_category": sc["failure_category"] or "captured_clean", "confidence": float(confidence)}),
+                timestamp=datetime.now(timezone.utc) - timedelta(minutes=60),
+            )
+            db.add(t_diag)
+
             # Predictions for each scenario
             action_map = {
                 0: (RecoveryActionType.RETRY, Decimal("0.85")),
@@ -377,6 +389,17 @@ def seed_database():
                 confidence=confidence,
             )
             db.add(prediction)
+
+            # Timeline event 2: Prediction Service
+            t_pred = TimelineEvent(
+                case_id=recovery_case.id,
+                actor="prediction_service",
+                action="predict_recovery",
+                input_json=json.dumps({"prediction_mode": "calibrated_ml_model"}),
+                decision_json=json.dumps({"best_action": action_type.value, "best_probability": float(prob)}),
+                timestamp=datetime.now(timezone.utc) - timedelta(minutes=50),
+            )
+            db.add(t_pred)
 
             # Recovery Action
             act_status = RecoveryActionStatus.APPROVED if i not in [2, 4, 6] else RecoveryActionStatus.DENIED
@@ -411,7 +434,7 @@ def seed_database():
             )
             db.add(policy_decision)
 
-            # Timeline event 1: Policy evaluation
+            # Timeline event 3: Policy evaluation
             timeline_policy = TimelineEvent(
                 case_id=recovery_case.id,
                 actor="ReviveAI::PolicyEngine",
@@ -431,9 +454,77 @@ def seed_database():
 
             # Additional lifecycle events per scenario type
             if i == 0:  # SCENARIO_1_RECOVERABLE: Timed Smart Retry
-                action.status = RecoveryActionStatus.APPROVED
+                action.status = RecoveryActionStatus.VERIFIED
+                t_exec = TimelineEvent(
+                    case_id=recovery_case.id,
+                    actor="BoundedExecutor",
+                    action="EXECUTE_RETRY",
+                    input_json=json.dumps({"execution_mode": "simulation", "action_type": "retry"}),
+                    decision_json=json.dumps({
+                        "message": "Controlled gateway retry executed during optimal morning window",
+                        "simulated_gateway_ref": "pay_retry_canonical_001"
+                    }),
+                    timestamp=datetime.now(timezone.utc) - timedelta(minutes=30),
+                )
+                db.add(t_exec)
+
+                t_verif = TimelineEvent(
+                    case_id=recovery_case.id,
+                    actor="IndependentVerification",
+                    action="VERIFY_RECOVERY_SUCCESS",
+                    input_json=json.dumps({"action_id": action.id, "mode": "simulation"}),
+                    decision_json=json.dumps({
+                        "message": "Independent verification confirmed fund capture",
+                        "recovered_amount": float(payment.amount)
+                    }),
+                    timestamp=datetime.now(timezone.utc) - timedelta(minutes=15),
+                )
+                db.add(t_verif)
+
+                # Add Ledger Entry
+                ledger = RecoveryLedger(
+                    case_id=recovery_case.id,
+                    payment_id=payment.id,
+                    gross_amount=payment.amount,
+                    action_cost=Decimal("0.50"),
+                    net_recovered=payment.amount - Decimal("0.50"),
+                    recovery_action="retry",
+                    provider_reference="pay_retry_canonical_001",
+                    recovered_at=datetime.now(timezone.utc) - timedelta(minutes=15),
+                    details=json.dumps({"proof_source": "razorpay_webhook_event"}),
+                )
+                db.add(ledger)
+                recovery_case.status = RecoveryCaseStatus.OPEN
+
             elif i == 1:  # SCENARIO_2_MULTI_STEP_RECOVERY: Retry failed -> Payment Link
                 action.status = RecoveryActionStatus.APPROVED
+            elif i == 2:  # SCENARIO_3_OPTED_OUT: Customer Opt-Out Policy Block
+                action.status = RecoveryActionStatus.DENIED
+                t_exec = TimelineEvent(
+                    case_id=recovery_case.id,
+                    actor="BoundedExecutor",
+                    action="EXECUTE_STOP",
+                    input_json=json.dumps({"execution_mode": "simulation", "action_type": "stop"}),
+                    decision_json=json.dumps({
+                        "message": "Customer contact suppressed by Policy Engine. Recovery lifecycle stopped.",
+                        "reason": denied_reason
+                    }),
+                    timestamp=datetime.now(timezone.utc) - timedelta(minutes=30),
+                )
+                db.add(t_exec)
+
+                t_verif = TimelineEvent(
+                    case_id=recovery_case.id,
+                    actor="IndependentVerification",
+                    action="VERIFY_CUSTOMER_PROTECTED",
+                    input_json=json.dumps({"action_id": action.id, "mode": "simulation"}),
+                    decision_json=json.dumps({
+                        "message": "Zero harassment guardrail verified. No notifications or links sent to customer."
+                    }),
+                    timestamp=datetime.now(timezone.utc) - timedelta(minutes=15),
+                )
+                db.add(t_verif)
+
             elif i == 3 or i == 7:  # SCENARIO_4_HIGH_VALUE & SCENARIO_8_HUMAN_ESCALATION: Escalate -> Human Queue
                 action.status = RecoveryActionStatus.EXECUTED
                 t_exec = TimelineEvent(
@@ -475,6 +566,18 @@ def seed_database():
                     timestamp=datetime.now(timezone.utc) - timedelta(minutes=30),
                 )
                 db.add(t_exec)
+
+                t_verif = TimelineEvent(
+                    case_id=recovery_case.id,
+                    actor="IndependentVerification",
+                    action="VERIFY_RECOVERY_DEFERRED",
+                    input_json=json.dumps({"action_id": action.id, "mode": "simulation"}),
+                    decision_json=json.dumps({
+                        "message": "Recovery attempt deferred due to Kotak Bank outage spike."
+                    }),
+                    timestamp=datetime.now(timezone.utc) - timedelta(minutes=15),
+                )
+                db.add(t_verif)
 
             elif i == 5:  # SCENARIO_6_RETRY_LIMIT: Stop
                 action.status = RecoveryActionStatus.EXECUTED

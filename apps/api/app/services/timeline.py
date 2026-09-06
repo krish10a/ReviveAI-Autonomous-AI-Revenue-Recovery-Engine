@@ -71,9 +71,26 @@ class TimelineService:
         try:
             events = db.query(TimelineEvent).filter(
                 TimelineEvent.case_id == case_id
-            ).order_by(TimelineEvent.timestamp.asc()).all()
+            ).order_by(TimelineEvent.timestamp.asc(), TimelineEvent.id.asc()).all()
 
             return events
+        finally:
+            db.close()
+
+    def get_timeline_for_scenario(self, scenario_key: str) -> List[TimelineEvent]:
+        """
+        Get timeline events for a canonical benchmark scenario by key.
+        """
+        db = SessionLocal()
+        try:
+            case = db.query(RecoveryCase).filter(
+                RecoveryCase.scenario_key == scenario_key
+            ).first()
+            if not case:
+                return []
+            return db.query(TimelineEvent).filter(
+                TimelineEvent.case_id == case.id
+            ).order_by(TimelineEvent.timestamp.asc(), TimelineEvent.id.asc()).all()
         finally:
             db.close()
 
