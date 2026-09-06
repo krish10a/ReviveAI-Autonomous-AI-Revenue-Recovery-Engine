@@ -26,8 +26,46 @@ from ..models.recovery_action import RecoveryAction, RecoveryActionType, Recover
 from ..models.policy_decision import PolicyDecision, PolicyDecisionResult
 from ..models.audit_log import AuditLog
 from ..models.timeline_event import TimelineEvent
+from ..models.recovery_ledger import RecoveryLedger
+from ..models.communication import Communication
+from ..models.payment_event import PaymentEvent
 from ..database import Base, engine
 import json
+
+def clear_synthetic_simulation_cases(db: Session) -> int:
+    """
+    Remove all synthetic simulation cases (where scenario_key is None)
+    and their associated records before running a new batch simulation.
+    Canonical benchmark cases (scenario_key IS NOT NULL) are preserved.
+    """
+    sim_cases = db.query(RecoveryCase.id, RecoveryCase.payment_id).filter(
+        RecoveryCase.scenario_key.is_(None)
+    ).all()
+
+    if not sim_cases:
+        return 0
+
+    sim_case_ids = [c.id for c in sim_cases]
+    sim_payment_ids = [c.payment_id for c in sim_cases if c.payment_id is not None]
+
+    db.query(RecoveryLedger).filter(RecoveryLedger.case_id.in_(sim_case_ids)).delete(synchronize_session=False)
+    db.query(TimelineEvent).filter(TimelineEvent.case_id.in_(sim_case_ids)).delete(synchronize_session=False)
+    db.query(AuditLog).filter(AuditLog.case_id.in_(sim_case_ids)).delete(synchronize_session=False)
+    db.query(PolicyDecision).filter(PolicyDecision.case_id.in_(sim_case_ids)).delete(synchronize_session=False)
+    db.query(RecoveryAction).filter(RecoveryAction.case_id.in_(sim_case_ids)).delete(synchronize_session=False)
+    db.query(RecoveryPrediction).filter(RecoveryPrediction.case_id.in_(sim_case_ids)).delete(synchronize_session=False)
+    db.query(FailureDiagnosis).filter(FailureDiagnosis.case_id.in_(sim_case_ids)).delete(synchronize_session=False)
+    db.query(Communication).filter(Communication.case_id.in_(sim_case_ids)).delete(synchronize_session=False)
+
+    db.query(RecoveryCase).filter(RecoveryCase.id.in_(sim_case_ids)).delete(synchronize_session=False)
+
+    if sim_payment_ids:
+        db.query(PaymentEvent).filter(PaymentEvent.payment_id.in_(sim_payment_ids)).delete(synchronize_session=False)
+        db.query(Payment).filter(Payment.id.in_(sim_payment_ids)).delete(synchronize_session=False)
+
+    db.commit()
+    logger.info(f"Cleared {len(sim_case_ids)} previous synthetic simulation cases")
+    return len(sim_case_ids)
 
 logger = logging.getLogger(__name__)
 
@@ -198,6 +236,11 @@ async def run_batch_simulation(
 
     db = SessionLocal()
     try:
+        # Clear previous synthetic simulation cases so batch runs start fresh from 0
+        cleared_count = clear_synthetic_simulation_cases(db)
+        if cleared_count > 0:
+            logger.info(f"Reset {cleared_count} synthetic cases to 0 before starting new batch simulation")
+
         # Get or create merchant and customers for simulation
         merchant = get_or_create_simulation_merchant(db)
         customers = get_or_create_simulation_customers(db, merchant.id, count=5)

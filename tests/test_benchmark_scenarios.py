@@ -158,3 +158,28 @@ def test_timeline_router_canonical_resolution():
         assert "EXECUTE_WAIT" in actions5, f"Case 5 resolution failed: {actions5}"
     finally:
         db.close()
+
+
+def test_batch_simulation_clears_previous_synthetic_cases():
+    res1 = asyncio.run(run_batch_simulation(total_cases=5))
+    assert res1["success"] is True
+
+    db = SessionLocal()
+    try:
+        synthetic_cases_after_run1 = db.query(RecoveryCase).filter(RecoveryCase.scenario_key.is_(None)).count()
+        assert synthetic_cases_after_run1 == 5, f"Expected 5 synthetic cases after run 1, found {synthetic_cases_after_run1}"
+    finally:
+        db.close()
+
+    res2 = asyncio.run(run_batch_simulation(total_cases=10))
+    assert res2["success"] is True
+
+    db = SessionLocal()
+    try:
+        synthetic_cases_after_run2 = db.query(RecoveryCase).filter(RecoveryCase.scenario_key.is_(None)).count()
+        assert synthetic_cases_after_run2 == 10, f"Expected 10 synthetic cases after run 2 (reset to 0 + 10 fresh), found {synthetic_cases_after_run2}"
+        canonical_cases = db.query(RecoveryCase).filter(RecoveryCase.scenario_key.isnot(None)).count()
+        assert canonical_cases == 8, f"Expected 8 canonical cases, found {canonical_cases}"
+    finally:
+        db.close()
+
