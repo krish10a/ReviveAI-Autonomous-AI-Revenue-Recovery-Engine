@@ -109,9 +109,9 @@ class LiveAnalyticsService:
                 {"stage": "Failed Payments", "count": total_cases, "amount": round(eligible_revenue, 2)},
                 {"stage": "Diagnosed", "count": total_cases, "amount": round(eligible_revenue, 2)},
                 {"stage": "Recovery Eligible", "count": total_cases, "amount": round(eligible_revenue, 2)},
-                {"stage": "Policy Approved", "count": approved_cases, "amount": round(eligible_revenue * (approved_cases / total_cases if total_cases > 0 else 0), 2)},
-                {"stage": "Action Executed", "count": executed_cases, "amount": round(eligible_revenue * (executed_cases / total_cases if total_cases > 0 else 0), 2)},
-                {"stage": "Verified Recovery", "count": recovered_cases, "amount": round(revenue_recovered, 2)},
+                {"stage": "Recovery Action Allowed", "count": approved_cases, "amount": round(eligible_revenue * (approved_cases / total_cases if total_cases > 0 else 0), 2)},
+                {"stage": "Recovery Action Executed", "count": executed_cases, "amount": round(eligible_revenue * (executed_cases / total_cases if total_cases > 0 else 0), 2)},
+                {"stage": "Independently Verified Recovery", "count": recovered_cases, "amount": round(revenue_recovered, 2)},
             ]
 
             # 7. Action Mix (AI Proposed vs Policy Approved)

@@ -107,16 +107,16 @@ const BENCHMARK_SCENARIOS = [
     bank: "Kotak Mahindra Bank",
     recAction: "Retry Proposed (p=75%)",
     aiReason: "ML predicted 75% retry recovery probability based on customer tenure and historical patterns",
-    policyOutcome: "DENIED (Bank failure 72% > 30% threshold)",
+    policyOutcome: "DENIED (Bank failure 100% > 30% threshold)",
     policyRule: "Bank Degradation Threshold Guardrail",
-    policyObserved: "Rolling failure rate = 72%",
+    policyObserved: "Rolling failure rate = 100%",
     policyThreshold: "30% max tolerance",
     finalDecision: "WAIT (Deferred Re-evaluation)",
     executorCapability: "WAIT only — Gateway retries strictly blocked",
     verifierResult: "DEFERRED (No duplicate charge attempted)",
     recoveredAmount: 0,
     actionCost: 0,
-    detail: "AI proposed automated retry. Policy Engine detected rolling 72% bank failure spike, blocked retry, and commanded WAIT."
+    detail: "AI proposed automated retry. Policy Engine detected rolling 100% bank failure spike, blocked retry, and commanded WAIT."
   },
   {
     id: 3,
@@ -233,11 +233,11 @@ export default function Dashboard() {
     console.log("[ReviveAI] runBatchSimulation started");
     try {
       setSimulating(true);
-      setActionFeedback("Resetting previous simulation cases to 0 & processing 25 fresh cases...");
+      setActionFeedback("Generating 25 synthetic cases (replacing previous synthetic operational cohort)...");
       const res = await fetch("/api/simulate/batch?total_cases=25", { method: "POST" });
       if (res.ok) {
         await fetchOverview();
-        setActionFeedback("Simulation completed: 25 fresh cases resolved & verified through recovery pipeline.");
+        setActionFeedback("Generated 25 synthetic cases. Replaced synthetic operational cohort; canonical benchmark scenarios remain isolated.");
         setTimeout(() => setActionFeedback(null), 5000);
       } else {
         setActionFeedback("Batch simulation request returned an error.");
@@ -302,7 +302,7 @@ export default function Dashboard() {
             disabled={simulating}
           >
             <Zap className="w-4 h-4 mr-2" />
-            {simulating ? "Processing Batch..." : "Run Batch Simulation (25)"}
+            {simulating ? "Generating 25 Cases..." : "Generate 25 Synthetic Cases"}
           </Button>
         </div>
       </div>
@@ -438,7 +438,7 @@ export default function Dashboard() {
                   Operational Recovery Funnel
                 </CardTitle>
                 <CardDescription className="text-xs">
-                  Real progression from payment failure through independent verification.
+                  Real progression from payment failure through independent verification across operational cohort. Note: Protective policy outcomes (STOP / WAIT / ESCALATE) prevent unauthorized retries and are excluded from recovery execution.
                 </CardDescription>
               </div>
             </div>
@@ -449,9 +449,9 @@ export default function Dashboard() {
                 { stage: "Failed Payments", count: metrics?.total_cases ?? 0, amount: metrics?.eligible_revenue ?? 0 },
                 { stage: "Diagnosed", count: metrics?.total_cases ?? 0, amount: metrics?.eligible_revenue ?? 0 },
                 { stage: "Recovery Eligible", count: metrics?.total_cases ?? 0, amount: metrics?.eligible_revenue ?? 0 },
-                { stage: "Policy Approved", count: (metrics?.total_cases ?? 0) - (metrics?.policy_denials_count ?? 0), amount: metrics?.eligible_revenue ?? 0 },
-                { stage: "Action Executed", count: metrics?.recovered_cases_count ?? 0, amount: metrics?.eligible_revenue ?? 0 },
-                { stage: "Verified Recovery", count: metrics?.recovered_cases_count ?? 0, amount: metrics?.revenue_recovered ?? 0 },
+                { stage: "Recovery Action Allowed", count: (metrics?.total_cases ?? 0) - (metrics?.policy_denials_count ?? 0), amount: metrics?.eligible_revenue ?? 0 },
+                { stage: "Recovery Action Executed", count: metrics?.recovered_cases_count ?? 0, amount: metrics?.eligible_revenue ?? 0 },
+                { stage: "Independently Verified Recovery", count: metrics?.recovered_cases_count ?? 0, amount: metrics?.revenue_recovered ?? 0 },
               ]).map((st, idx) => (
                 <div
                   key={st.stage}
@@ -484,15 +484,15 @@ export default function Dashboard() {
           <CardHeader className="pb-3">
             <CardTitle className="text-base font-bold flex items-center gap-2">
               <Scale className="w-4 h-4 text-indigo-600" />
-              Action Mix: Proposal Events vs. Decision Events
+              AI Proposal → Final Action
             </CardTitle>
             <CardDescription className="text-xs">
-              AI recommendation events vs policy-enforced execution events across case lifecycles (may exceed total cases during replanning).
+              Event counts across case lifecycles; one case may generate multiple proposals during replanning.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="p-2.5 rounded-lg bg-blue-50/60 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900 text-[11px] font-medium text-blue-900 dark:text-blue-200 text-center">
-              AI proposes events. Policy enforces decisions. Executor obeys. (Counts represent events, not unique cases).
+              AI Proposal Events → Final Execution Events. (Proposal events may exceed case count because a case can be replanned).
             </div>
 
             <div className="space-y-2 text-xs">
@@ -510,11 +510,11 @@ export default function Dashboard() {
                     <span className="font-semibold text-slate-700 dark:text-slate-300 text-xs">{act.name}</span>
                     <div className="flex items-center gap-3 text-xs">
                       <span className="text-slate-500 font-mono">
-                        Proposal events: <strong className="text-slate-700 dark:text-slate-300">{proposedCount}</strong>
+                        AI Proposal Events: <strong className="text-slate-700 dark:text-slate-300">{proposedCount}</strong>
                       </span>
                       <span className="text-slate-400">→</span>
                       <span className="font-mono text-emerald-600 dark:text-emerald-400">
-                        Decision events: <strong>{approvedCount}</strong>
+                        Final Execution Events: <strong>{approvedCount}</strong>
                       </span>
                     </div>
                   </div>
@@ -607,9 +607,9 @@ export default function Dashboard() {
       <div className="space-y-4">
         <div className="flex justify-between items-end">
           <div>
-            <h2 className="text-xl font-bold tracking-tight">Deterministic Benchmark Scenarios</h2>
+            <h2 className="text-xl font-bold tracking-tight">Canonical Benchmark Scenarios</h2>
             <p className="text-xs text-slate-500">
-              Four canonical failure modes demonstrating where ReviveAI differs from naive automation. Click to inspect without side-effects.
+              Four deterministic failure modes used to demonstrate policy behavior. (Click to inspect without side-effects).
             </p>
           </div>
         </div>
