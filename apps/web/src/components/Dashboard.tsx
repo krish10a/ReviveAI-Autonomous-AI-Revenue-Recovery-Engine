@@ -484,15 +484,15 @@ export default function Dashboard() {
           <CardHeader className="pb-3">
             <CardTitle className="text-base font-bold flex items-center gap-2">
               <Scale className="w-4 h-4 text-indigo-600" />
-              Action Mix Comparison
+              Action Mix: Proposal Events vs. Decision Events
             </CardTitle>
             <CardDescription className="text-xs">
-              AI proposals vs final policy-allowed actions.
+              AI recommendation events vs policy-enforced execution events across case lifecycles (may exceed total cases during replanning).
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="p-2.5 rounded-lg bg-blue-50/60 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900 text-[11px] font-medium text-blue-900 dark:text-blue-200 text-center">
-              AI proposes. Policy controls. Executor obeys.
+              AI proposes events. Policy enforces decisions. Executor obeys. (Counts represent events, not unique cases).
             </div>
 
             <div className="space-y-2 text-xs">
@@ -510,11 +510,11 @@ export default function Dashboard() {
                     <span className="font-semibold text-slate-700 dark:text-slate-300 text-xs">{act.name}</span>
                     <div className="flex items-center gap-3 text-xs">
                       <span className="text-slate-500 font-mono">
-                        Proposed: <strong className="text-slate-700 dark:text-slate-300">{proposedCount}</strong>
+                        Proposal events: <strong className="text-slate-700 dark:text-slate-300">{proposedCount}</strong>
                       </span>
                       <span className="text-slate-400">→</span>
                       <span className="font-mono text-emerald-600 dark:text-emerald-400">
-                        Enforced: <strong>{approvedCount}</strong>
+                        Decision events: <strong>{approvedCount}</strong>
                       </span>
                     </div>
                   </div>
