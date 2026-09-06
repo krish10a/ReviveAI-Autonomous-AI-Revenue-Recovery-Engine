@@ -62,7 +62,7 @@ def run_control_vs_ai_experiment(
     seed: int = 42
 ) -> Dict[str, Any]:
     """
-    Run randomized, deterministic Control vs. AI recovery experiment.
+    Run deterministic controlled simulation: Control vs. AI recovery comparison.
     CONTROL: Naive static retry strategy.
     AI: Full ReviveAI engine (Diagnosis -> ML -> Policy Barrier -> Bounded Execution -> Verification).
     """

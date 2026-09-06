@@ -193,7 +193,7 @@
     <rect x="85" y="390" width="200" height="105" rx="10" fill="url(#cardGrad)" stroke="#047857" stroke-width="2" />
     <rect x="85" y="390" width="200" height="4" rx="2" fill="url(#emeraldGrad)" />
     <text x="185" y="418" text-anchor="middle" font-size="12.5" font-weight="800" fill="#34d399">8. Financial Ledger</text>
-    <text x="185" y="438" text-anchor="middle" font-size="10.5" fill="#ecfdf5">Double-Entry Accounting</text>
+    <text x="185" y="438" text-anchor="middle" font-size="10.5" fill="#ecfdf5">Itemized Financial Ledger</text>
     <text x="185" y="454" text-anchor="middle" font-size="10" fill="#94a3b8">Net = Gross &#x2212; Action Cost</text>
     <text x="185" y="470" text-anchor="middle" font-size="10" fill="#6ee7b7">Immutable Audit Record</text>
   </g>

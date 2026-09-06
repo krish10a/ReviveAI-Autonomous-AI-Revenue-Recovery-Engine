@@ -63,7 +63,7 @@ ReviveAI is an autonomous, policy-governed revenue recovery engine designed for 
 3. **Deterministic Policy Barrier**: Subject every AI proposal to hard business, risk, customer-protection, and operational guardrails (customer opt-out, bank health outage detection, quiet hours, retry caps, and high-value amount ceilings).
 4. **Bounded Execution**: Safely dispatches strictly typed, pre-approved action primitives through sandboxed execution runners.
 5. **Independent Verification**: Validates payment settlement through independent proof sources—never trusting executor self-reports.
-6. **Auditable Financial Ledger**: Writes double-entry accounting records with itemized action costs and net recovered revenue ($\text{Net} = \text{Gross} - \text{Cost}$).
+6. **Auditable Financial Ledger**: Writes immutable financial ledger records with itemized action costs and net recovered revenue ($\text{Net} = \text{Gross} - \text{Cost}$).
 
 ---
 
@@ -138,9 +138,9 @@ ReviveAI strictly enforces financial accounting and monotonic invariants across 
 
 ---
 
-## Controlled Business Impact Experiment
+## Controlled Simulation Impact
 
-To isolate treatment efficacy, ReviveAI includes a randomized controlled experiment running across an identical synthetic population of failed payments (50 Control vs 50 ReviveAI, fixed seed = 42):
+To isolate treatment efficacy, ReviveAI includes a **deterministic controlled simulation** running across an identical synthetic population of failed payments (50 Control vs 50 ReviveAI, fixed seed = 42):
 
 | Metric | Control Group (Static Retry) | ReviveAI (Closed-Loop Pipeline) | Difference / Business Lift |
 |---|:---:|:---:|:---:|
@@ -307,7 +307,7 @@ make build
 * `GET /analytics/overview` — Live operational overview, monotonic funnel metrics, reconciled action mix, and active guardrail states
 * `GET /analytics/failure-reason` — Empirical recovery breakdown by failure code taxonomy
 * `GET /analytics/intervention-performance` — Performance metrics by recovery intervention type
-* `POST /analytics/experiment` — Randomized, deterministic Control vs. AI cohort experiment (n=100, seed=42)
+* `POST /analytics/experiment` — Deterministic controlled simulation: Control vs. AI cohort (n=100, seed=42)
 
 ### Recovery Cases & Decision Replay
 * `GET /recovery-cases` — List recovery cases with pagination
