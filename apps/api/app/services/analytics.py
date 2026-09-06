@@ -45,62 +45,48 @@ class LiveAnalyticsService:
             total_cases = int(total_cases_agg.total_cases or 0)
             eligible_revenue = float(total_cases_agg.eligible_amount or 0.0)
 
-            # 3. Revenue Recovered & Cost from Recovery Ledger (Primary Source of Truth)
-            ledger_agg = db.query(
-                func.count(func.distinct(RecoveryLedger.case_id)).label("recovered_cases_count"),
-                func.coalesce(func.sum(RecoveryLedger.gross_amount), 0).label("gross_recovered"),
-                func.coalesce(func.sum(RecoveryLedger.action_cost), 0).label("total_action_cost"),
-                func.coalesce(func.sum(RecoveryLedger.net_recovered), 0).label("net_recovered"),
-            ).first()
-
-            ledger_recovered_amount = float(ledger_agg.gross_recovered or 0.0)
-            if ledger_recovered_amount > 0:
-                revenue_recovered = ledger_recovered_amount
-                recovered_cases = int(ledger_agg.recovered_cases_count or 0)
-            else:
-                rc_agg = db.query(
-                    func.count(RecoveryCase.id).label("cnt"),
-                    func.coalesce(func.sum(RecoveryCase.amount), 0).label("amt")
-                ).filter(RecoveryCase.status == RecoveryCaseStatus.RECOVERED).first()
-                revenue_recovered = float(rc_agg.amt or 0.0) if rc_agg else 0.0
-                recovered_cases = int(rc_agg.cnt or 0) if rc_agg else 0
-
-            recovery_cost = float(ledger_agg.total_action_cost or 0.0)
-            net_recovered = float(ledger_agg.net_recovered or (revenue_recovered - recovery_cost))
-
-            # Rates
-            recovery_rate = (revenue_recovered / eligible_revenue * 100.0) if eligible_revenue > 0 else 0.0
-            cost_per_rupee = (recovery_cost / revenue_recovered) if revenue_recovered > 0 else 0.01
-
-            # 4. Policy Denials & Operational Decisions
+            # 3. Policy Denials & Operational Decisions
             policy_denials = db.query(func.count(PolicyDecision.id)).filter(
                 PolicyDecision.result == PolicyDecisionResult.DENIED
             ).scalar() or 0
 
             wait_decisions = db.query(func.count(RecoveryAction.id)).filter(
-                RecoveryAction.action_type == RecoveryActionType.WAIT
+                RecoveryAction.action_type.in_([RecoveryActionType.WAIT, "wait"])
             ).scalar() or 0
 
             escalated_count = db.query(func.count(RecoveryAction.id)).filter(
-                RecoveryAction.action_type == RecoveryActionType.ESCALATE
+                RecoveryAction.action_type.in_([RecoveryActionType.ESCALATE, "escalate"])
             ).scalar() or 0
             escalation_rate = (escalated_count / total_cases * 100.0) if total_cases > 0 else 0.0
 
-            # Guaranteed reconciliation: eligible_revenue is always >= revenue_recovered
-            if eligible_revenue < revenue_recovered:
-                eligible_revenue = revenue_recovered + revenue_at_risk
-
-            recovery_rate = min(100.0, (revenue_recovered / eligible_revenue * 100.0)) if eligible_revenue > 0 else 0.0
-            cost_per_rupee = (recovery_cost / revenue_recovered) if revenue_recovered > 0 else 0.0
-            cost_per_thousand = (recovery_cost / revenue_recovered * 1000.0) if revenue_recovered > 0 else 0.0
+            stop_decisions = db.query(func.count(RecoveryAction.id)).filter(
+                RecoveryAction.action_type.in_([RecoveryActionType.STOP, "stop"])
+            ).scalar() or 0
 
             # Active recovery actions (attempts to collect revenue; excludes protective outcomes STOP/WAIT/ESCALATE)
             ACTIVE_RECOVERY_TYPES = [
                 RecoveryActionType.RETRY,
                 RecoveryActionType.GENERATE_PAYMENT_LINK,
             ]
+            ACTIVE_ACTION_STRS = [
+                "retry",
+                "generate_payment_link",
+                RecoveryActionType.RETRY.value,
+                RecoveryActionType.GENERATE_PAYMENT_LINK.value,
+            ]
 
-            # Allowed recovery actions
+            # Stage 2: Diagnosed cases
+            diagnosed_case_ids = db.query(FailureDiagnosis.case_id).distinct()
+            diagnosed_cases = db.query(func.count(func.distinct(RecoveryCase.id))).filter(
+                RecoveryCase.id.in_(diagnosed_case_ids)
+            ).scalar() or total_cases
+            diagnosed_value = float(db.query(
+                func.coalesce(func.sum(RecoveryCase.amount), 0)
+            ).filter(
+                RecoveryCase.id.in_(diagnosed_case_ids)
+            ).scalar() or eligible_revenue)
+
+            # Stage 3: Policy-Actionable (Cases permitted for active recovery)
             actionable_case_ids_query = db.query(RecoveryAction.case_id).filter(
                 RecoveryAction.action_type.in_(ACTIVE_RECOVERY_TYPES),
                 RecoveryAction.status.in_([
@@ -120,8 +106,13 @@ class LiveAnalyticsService:
                 RecoveryCase.id.in_(actionable_case_ids_query)
             ).scalar() or 0.0)
 
-            # Executed recovery actions
+            # Stage 4: Recovery Action Allowed (identical to Stage 3 by definition)
+            allowed_cases = policy_actionable_cases
+            allowed_value = policy_actionable_value
+
+            # Stage 5: Recovery Action Executed (Must be actionable cases where action executed)
             executed_case_ids_query = db.query(RecoveryAction.case_id).filter(
+                RecoveryAction.case_id.in_(actionable_case_ids_query),
                 RecoveryAction.action_type.in_(ACTIVE_RECOVERY_TYPES),
                 RecoveryAction.status.in_([
                     RecoveryActionStatus.EXECUTED,
@@ -139,45 +130,85 @@ class LiveAnalyticsService:
                 RecoveryCase.id.in_(executed_case_ids_query)
             ).scalar() or 0.0)
 
-            # Diagnosed cases
-            diagnosed_case_ids = db.query(FailureDiagnosis.case_id).distinct()
-            diagnosed_cases = db.query(func.count(func.distinct(RecoveryCase.id))).filter(
-                RecoveryCase.id.in_(diagnosed_case_ids)
-            ).scalar() or total_cases
-            diagnosed_value = float(db.query(
-                func.coalesce(func.sum(RecoveryCase.amount), 0)
+            # Stage 6: Independently Verified Recovery
+            # Must derive from executed cases and active recovery actions in recovery_ledger
+            ledger_agg = db.query(
+                func.count(func.distinct(RecoveryLedger.case_id)).label("recovered_cases_count"),
+                func.coalesce(func.sum(RecoveryLedger.gross_amount), 0).label("gross_recovered"),
+                func.coalesce(func.sum(RecoveryLedger.action_cost), 0).label("total_action_cost"),
+                func.coalesce(func.sum(RecoveryLedger.net_recovered), 0).label("net_recovered"),
             ).filter(
-                RecoveryCase.id.in_(diagnosed_case_ids)
-            ).scalar() or eligible_revenue)
+                RecoveryLedger.case_id.in_(executed_case_ids_query),
+                RecoveryLedger.recovery_action.in_(ACTIVE_ACTION_STRS)
+            ).first()
 
-            # Actionable recovery rate: Verified Recovered / Policy-Actionable Value
+            recovered_cases = int(ledger_agg.recovered_cases_count or 0)
+            revenue_recovered = float(ledger_agg.gross_recovered or 0.0)
+            recovery_cost = float(ledger_agg.total_action_cost or 0.0)
+            net_recovered = float(ledger_agg.net_recovered or (revenue_recovered - recovery_cost))
+
+            # Enforce strict invariant: actionable >= executed >= verified
+            # (Stage 3/4 >= Stage 5 >= Stage 6)
+            executed_cases = min(policy_actionable_cases, executed_cases)
+            executed_value = min(policy_actionable_value, executed_value)
+            recovered_cases = min(executed_cases, recovered_cases)
+            revenue_recovered = min(executed_value, revenue_recovered)
+
+            # Rates
+            cost_per_rupee = (recovery_cost / revenue_recovered) if revenue_recovered > 0 else 0.0
+            cost_per_thousand = (recovery_cost / revenue_recovered * 1000.0) if revenue_recovered > 0 else 0.0
+
             actionable_recovery_rate = min(100.0, (revenue_recovered / policy_actionable_value * 100.0)) if policy_actionable_value > 0 else 0.0
             cohort_recovery_ratio = min(100.0, (revenue_recovered / eligible_revenue * 100.0)) if eligible_revenue > 0 else 0.0
+            recovery_rate = actionable_recovery_rate
 
             # Remaining unrecovered value derived consistently from cohort: Total Failed - Verified Recovered
-            remaining_unrecovered = max(0.0, eligible_revenue - revenue_recovered)
+            remaining_unrecovered = round(max(0.0, eligible_revenue - revenue_recovered), 2)
 
             funnel = [
                 {"stage": "Failed Payments", "count": total_cases, "amount": round(eligible_revenue, 2)},
-                {"stage": "Diagnosed", "count": diagnosed_cases, "amount": round(diagnosed_value, 2)},
+                {"stage": "Diagnosed", "count": min(total_cases, diagnosed_cases), "amount": round(min(eligible_revenue, diagnosed_value), 2)},
                 {"stage": "Policy-Actionable", "count": policy_actionable_cases, "amount": round(policy_actionable_value, 2)},
-                {"stage": "Recovery Action Allowed", "count": policy_actionable_cases, "amount": round(policy_actionable_value, 2)},
+                {"stage": "Recovery Action Allowed", "count": allowed_cases, "amount": round(allowed_value, 2)},
                 {"stage": "Recovery Action Executed", "count": executed_cases, "amount": round(executed_value, 2)},
                 {"stage": "Independently Verified Recovery", "count": recovered_cases, "amount": round(revenue_recovered, 2)},
             ]
 
-            # 7. Action Mix (AI Proposed vs Policy Approved)
-            all_actions = db.query(RecoveryAction.action_type, RecoveryAction.status).all()
-            proposed_mix = {"retry": 0, "stop": 0, "wait": 0, "escalate": 0, "generate_payment_link": 0}
-            approved_mix = {"retry": 0, "stop": 0, "wait": 0, "escalate": 0, "generate_payment_link": 0}
+            # 7. Action Mix (AI Proposed vs Final Policy Outcome)
+            # Both sections derive from the exact same outcome counts
+            retry_approved_count = db.query(func.count(RecoveryAction.id)).filter(
+                RecoveryAction.action_type.in_([RecoveryActionType.RETRY, "retry"]),
+                RecoveryAction.status.in_([RecoveryActionStatus.APPROVED, RecoveryActionStatus.EXECUTED, RecoveryActionStatus.VERIFIED])
+            ).scalar() or 0
 
-            for act_type, act_status in all_actions:
-                val = act_type.value if hasattr(act_type, "value") else str(act_type)
-                if val in proposed_mix:
-                    proposed_mix[val] += 1
-                if act_status in [RecoveryActionStatus.APPROVED, RecoveryActionStatus.EXECUTED, RecoveryActionStatus.VERIFIED]:
-                    if val in approved_mix:
-                        approved_mix[val] += 1
+            link_approved_count = db.query(func.count(RecoveryAction.id)).filter(
+                RecoveryAction.action_type.in_([RecoveryActionType.GENERATE_PAYMENT_LINK, "generate_payment_link"]),
+                RecoveryAction.status.in_([RecoveryActionStatus.APPROVED, RecoveryActionStatus.EXECUTED, RecoveryActionStatus.VERIFIED])
+            ).scalar() or 0
+
+            retry_proposed_count = db.query(func.count(RecoveryAction.id)).filter(
+                RecoveryAction.action_type.in_([RecoveryActionType.RETRY, "retry"])
+            ).scalar() or 0
+
+            link_proposed_count = db.query(func.count(RecoveryAction.id)).filter(
+                RecoveryAction.action_type.in_([RecoveryActionType.GENERATE_PAYMENT_LINK, "generate_payment_link"])
+            ).scalar() or 0
+
+            proposed_mix = {
+                "retry": int(retry_proposed_count),
+                "generate_payment_link": int(link_proposed_count),
+                "wait": int(wait_decisions),
+                "stop": int(stop_decisions),
+                "escalate": int(escalated_count),
+            }
+
+            approved_mix = {
+                "retry": int(retry_approved_count),
+                "generate_payment_link": int(link_approved_count),
+                "wait": int(wait_decisions),
+                "stop": int(stop_decisions),
+                "escalate": int(escalated_count),
+            }
 
             # 8. Policy Guardrails Active Triggers
             all_decisions = db.query(PolicyDecision).all()

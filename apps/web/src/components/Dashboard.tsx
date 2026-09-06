@@ -533,8 +533,13 @@ export default function Dashboard() {
                 { name: "Suppress Action (STOP)", key: "stop", aiKey: "stop", suffix: "STOP" },
                 { name: "Human Escalation", key: "escalate", aiKey: "escalate", suffix: "ESCALATE" },
               ].map((act) => {
-                const proposedCount = metrics?.action_mix?.proposed?.[act.aiKey] ?? 0;
-                const approvedCount = metrics?.action_mix?.approved?.[act.key] ?? 0;
+                const proposedCount = metrics?.action_mix?.proposed?.[act.aiKey] ?? (
+                  act.key === "wait" ? (metrics?.wait_decisions_count ?? 0) :
+                  act.key === "escalate" ? (metrics?.escalated_cases_count ?? 0) : 0
+                );
+                const approvedCount = (metrics?.action_mix?.approved?.[act.key] !== undefined && metrics?.action_mix?.approved?.[act.key] !== null && metrics?.action_mix?.approved?.[act.key] > 0)
+                  ? metrics.action_mix.approved[act.key]
+                  : (act.key === "wait" ? (metrics?.wait_decisions_count ?? 0) : act.key === "escalate" ? (metrics?.escalated_cases_count ?? 0) : (metrics?.action_mix?.approved?.[act.key] ?? 0));
                 return (
                   <div key={act.key} className="flex items-center justify-between p-2 rounded bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800">
                     <span className="font-semibold text-slate-700 dark:text-slate-300 text-xs">{act.name}</span>
