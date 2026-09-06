@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/simulate", tags=["simulation"])
 
 # Helper function to generate synthetic payment data
-def generate_synthetic_payment(db: Session, merchant_id: int, index: int) -> Dict[str, Any]:
+def generate_synthetic_payment(db: Session, merchant_id: int, customer_id: int, index: int) -> Dict[str, Any]:
     """Generate a synthetic failed payment for simulation."""
 
     # Different failure scenarios with realistic distributions
@@ -60,17 +60,17 @@ def generate_synthetic_payment(db: Session, merchant_id: int, index: int) -> Dic
 
     # Generate payment amount based on failure type (more realistic distributions)
     if selected_failure == "insufficient_funds":
-        amount = round(random.uniform(500, 5000), 2)  # Smaller amounts more likely to fail for insufficient funds
+        amount = round(random.uniform(500, 5000), 2)
     elif selected_failure == "expired_card":
-        amount = round(random.uniform(1000, 10000), 2)  # Any amount
+        amount = round(random.uniform(1000, 10000), 2)
     elif selected_failure == "authentication_failed":
-        amount = round(random.uniform(500, 15000), 2)  # Any amount
+        amount = round(random.uniform(500, 15000), 2)
     elif selected_failure == "technical_error":
-        amount = round(random.uniform(1000, 8000), 2)  # Medium amounts
+        amount = round(random.uniform(1000, 8000), 2)
     elif selected_failure == "bank_declined":
-        amount = round(random.uniform(2000, 20000), 2)  # Higher amounts more likely to be declined
+        amount = round(random.uniform(2000, 20000), 2)
     else:  # transaction_not_allowed
-        amount = round(random.uniform(1000, 15000), 2)  # Any amount
+        amount = round(random.uniform(1000, 15000), 2)
 
     # Generate payment method
     payment_methods = [PaymentMethod.CARD, PaymentMethod.UPI, PaymentMethod.NETBANKING, PaymentMethod.WALLET]
@@ -88,6 +88,7 @@ def generate_synthetic_payment(db: Session, merchant_id: int, index: int) -> Dic
     # Create payment record
     payment = Payment(
         merchant_id=merchant_id,
+        customer_id=customer_id,
         amount=amount,
         currency="INR",
         status=PaymentStatus.FAILED,
@@ -109,12 +110,12 @@ def generate_synthetic_payment(db: Session, merchant_id: int, index: int) -> Dic
         "bank": bank
     }
 
-# Helper function to create customer and merchant if they don't exist
-def get_or_create_merchant_customer(db: Session) -> tuple:
-    """Get or create a test merchant and customer for simulation."""
-
-    # Get or create merchant
+# Helper function to get or create merchant for simulation
+def get_or_create_simulation_merchant(db: Session) -> Merchant:
+    """Get or create a test merchant for simulation."""
     merchant = db.query(Merchant).filter(Merchant.merchant_reference == "SIM_MERCH_001").first()
+    if not merchant:
+        merchant = db.query(Merchant).first()
     if not merchant:
         merchant = Merchant(
             merchant_reference="SIM_MERCH_001",
@@ -127,7 +128,7 @@ def get_or_create_merchant_customer(db: Session) -> tuple:
             webhook_secret="test_webhook_secret",
             max_retries=3,
             contact_start_hour=8,
-            contact_end_hour=20,
+            contact_end_hour=21,
             max_automated_amount=5000.00,
             human_escalation_threshold=10000.00,
             message_cooldown_hours=1,
@@ -137,30 +138,48 @@ def get_or_create_merchant_customer(db: Session) -> tuple:
             is_test_mode=True
         )
         db.add(merchant)
-        db.flush()
+        db.commit()
+        db.refresh(merchant)
+    return merchant
 
-    # Get or create customer
-    customer = db.query(Customer).filter(Customer.customer_reference == "SIM_CUST_001").first()
-    if not customer:
-        customer = Customer(
-            customer_reference="SIM_CUST_001",
-            merchant_id=merchant.id,
-            name="Simulation Customer",
-            email="customer@simulation.com",
-            phone="+919876543211",
-            opted_out=False,
-            preferred_contact_method="email",
-            language="en",
-            risk_score=0.3,
-            tenure_days=365,
-            previous_successful_payments=10,
-            previous_failed_payments=2,
-            previous_recoveries=1
-        )
-        db.add(customer)
-        db.flush()
+# Helper function to get or create synthetic customers for simulation
+def get_or_create_simulation_customers(db: Session, merchant_id: int, count: int = 5) -> List[Customer]:
+    """Get or create a pool of synthetic customers for simulation."""
+    customers = db.query(Customer).filter(Customer.merchant_id == merchant_id).limit(count).all()
+    if len(customers) < count:
+        profiles = [
+            {"ref": "SIM_CUST_001", "name": "Simulation Customer 1", "email": "cust1@simulation.com", "phone": "+919876543211", "opted_out": False, "risk": 0.30, "tenure": 365},
+            {"ref": "SIM_CUST_002", "name": "Opted Out Customer", "email": "cust2@simulation.com", "phone": "+919876543212", "opted_out": True, "risk": 0.50, "tenure": 180},
+            {"ref": "SIM_CUST_003", "name": "High Risk Customer", "email": "cust3@simulation.com", "phone": "+919876543213", "opted_out": False, "risk": 0.85, "tenure": 30},
+            {"ref": "SIM_CUST_004", "name": "VIP Customer", "email": "cust4@simulation.com", "phone": "+919876543214", "opted_out": False, "risk": 0.10, "tenure": 720},
+            {"ref": "SIM_CUST_005", "name": "New Customer", "email": "cust5@simulation.com", "phone": "+919876543215", "opted_out": False, "risk": 0.40, "tenure": 10},
+        ]
+        existing_refs = {c.customer_reference for c in customers}
+        for p in profiles:
+            if len(customers) >= count:
+                break
+            if p["ref"] not in existing_refs:
+                cust = Customer(
+                    customer_reference=p["ref"],
+                    merchant_id=merchant_id,
+                    name=p["name"],
+                    email=p["email"],
+                    phone=p["phone"],
+                    opted_out=p["opted_out"],
+                    preferred_contact_method="email",
+                    language="en",
+                    risk_score=p["risk"],
+                    tenure_days=p["tenure"],
+                    previous_successful_payments=10,
+                    previous_failed_payments=2,
+                    previous_recoveries=1
+                )
+                db.add(cust)
+                db.commit()
+                db.refresh(cust)
+                customers.append(cust)
 
-    return merchant, customer
+    return customers
 
 @router.post("/batch")
 async def run_batch_simulation(
@@ -179,8 +198,12 @@ async def run_batch_simulation(
 
     db = SessionLocal()
     try:
-        # Get or create merchant and customer for simulation
-        merchant, customer = get_or_create_merchant_customer(db)
+        # Get or create merchant and customers for simulation
+        merchant = get_or_create_simulation_merchant(db)
+        customers = get_or_create_simulation_customers(db, merchant.id, count=5)
+
+        merchant_id = merchant.id
+        customer_ids = [c.id for c in customers]
 
         # Initialize services
         recovery_case_service = get_recovery_case_service()
@@ -222,25 +245,25 @@ async def run_batch_simulation(
         # Process each synthetic payment
         for i in range(total_cases):
             try:
+                cust_id = customer_ids[i % len(customer_ids)]
                 # Generate synthetic payment
-                payment_data = generate_synthetic_payment(db, merchant.id, i)
+                payment_data = generate_synthetic_payment(db, merchant_id, cust_id, i)
                 payment = payment_data["payment"]
 
+                results["total_injected"] += 1
                 add_log(f"Generated payment {payment.id} for {payment_data['amount']} INR ({payment_data['failure_category']})")
 
                 # Create recovery case from the failed payment
-                recovery_case = recovery_case_service.create_recovery_case_from_payment(payment.id)
+                recovery_case = recovery_case_service.create_recovery_case_from_payment(payment.id, db=db)
+                db.commit()
 
                 add_log(f"Created recovery case {recovery_case.id} for payment {payment.id}")
-
-                # Run the agent loop for this case
-                # Note: For performance in batch simulation, we'll run a simplified version
-                # that goes through the key steps without the full iterative loop
 
                 # 1. Diagnosis
                 diagnosis_result = diagnosis_service.diagnose_failure(
                     case_id=recovery_case.id,
-                    diagnosis_mode="rule_based"
+                    diagnosis_mode="rule_based",
+                    db=db
                 )
 
                 if diagnosis_result["success"]:
@@ -248,12 +271,14 @@ async def run_batch_simulation(
                     add_log(f"Diagnosed case {recovery_case.id}: {diagnosis_result['failure_category']} (confidence: {diagnosis_result['confidence']:.2f})")
                 else:
                     add_log(f"Failed to diagnose case {recovery_case.id}: {diagnosis_result.get('error')}")
+                    results["failed_cases"] += 1
                     continue
 
                 # 2. Prediction
                 prediction_result = prediction_service.predict_recovery(
                     case_id=recovery_case.id,
-                    prediction_mode="heuristic"
+                    prediction_mode="heuristic",
+                    db=db
                 )
 
                 if prediction_result["success"]:
@@ -265,10 +290,10 @@ async def run_batch_simulation(
                     add_log(f"Predicted best action for case {recovery_case.id}: {best_action[0]} (probability: {best_action[1]['probability']:.2f})")
                 else:
                     add_log(f"Failed to predict for case {recovery_case.id}: {prediction_result.get('error')}")
+                    results["failed_cases"] += 1
                     continue
 
-                # 3. Policy evaluation and action selection (simplified)
-                # Get the best action from predictions
+                # 3. Policy evaluation and action selection
                 if prediction_result["success"]:
                     best_action_type_str, best_action_data = max(
                         prediction_result["predictions"].items(),
@@ -277,61 +302,61 @@ async def run_batch_simulation(
 
                     try:
                         best_action_type = RecoveryActionType(best_action_type_str)
+                        action_prob = best_action_data["probability"]
+                        action_reason = f"ML prediction: {action_prob * 100:.1f}% success probability"
 
-                        # Create a temporary action for policy evaluation
                         temp_action = RecoveryAction(
                             case_id=recovery_case.id,
                             action_type=best_action_type,
-                            reason=f"ML prediction: {best_action_data['probability']*100:.1f}% success probability",
-                            predicted_success_probability=best_action_data["probability"],
+                            reason=action_reason,
+                            predicted_success_probability=action_prob,
                             status=RecoveryActionStatus.PROPOSED
                         )
 
-                        # Evaluate against policy
                         policy_result = policy_service.evaluate_action(
                             case_id=recovery_case.id,
                             action=temp_action,
-                            merchant=merchant
+                            merchant=merchant,
+                            db=db
                         )
 
                         if policy_result["allowed"]:
-                            # Execute the action
                             recovery_action = RecoveryAction(
                                 case_id=recovery_case.id,
                                 action_type=best_action_type,
-                                reason=temp_action.reason,
-                                predicted_success_probability=temp_action.predicted_success_probability,
+                                reason=action_reason,
+                                predicted_success_probability=action_prob,
                                 status=RecoveryActionStatus.APPROVED
                             )
 
                             db.add(recovery_action)
                             db.flush()
 
-                            # Execute action
                             execution_result = executor_service.execute_action(
                                 case_id=recovery_case.id,
                                 action=recovery_action,
-                                execution_mode="simulation"
+                                execution_mode="simulation",
+                                db=db
                             )
 
                             if execution_result["success"]:
                                 recovery_action.status = RecoveryActionStatus.EXECUTED
                                 recovery_action.executed_at = datetime.utcnow()
-                                recovery_action.result = str(execution_result["details"])
+                                recovery_action.result = json.dumps(execution_result["details"])
 
                                 results["executed"] += 1
 
-                                # Verify the action resulted in recovery
                                 verification_result = verification_service.verify_recovery(
                                     case_id=recovery_case.id,
                                     action_id=recovery_action.id,
-                                    verification_mode="simulation"
+                                    verification_mode="simulation",
+                                    db=db
                                 )
 
                                 if verification_result["success"]:
                                     recovery_action.status = RecoveryActionStatus.VERIFIED
                                     recovery_action.verified_at = datetime.utcnow()
-                                    recovery_action.result = str({
+                                    recovery_action.result = json.dumps({
                                         "recovered": verification_result["recovered"],
                                         "details": verification_result["details"]
                                     })
@@ -339,7 +364,6 @@ async def run_batch_simulation(
                                     results["verified"] += 1
 
                                     if verification_result["recovered"]:
-                                        # Update recovery case and payment as recovered
                                         recovery_case.status = RecoveryCaseStatus.RECOVERED
                                         recovery_case.closed_at = datetime.utcnow()
                                         recovery_case.recovered_amount = payment.amount
@@ -350,20 +374,18 @@ async def run_batch_simulation(
 
                                         add_log(f"Case {recovery_case.id} recovered ₹{payment.amount} via {best_action_type.value}")
                                     else:
-                                        add_log(f"Case {recovery_case.id} verification failed - no recovery")
+                                        add_log(f"Case {recovery_case.id} verification completed - non-recoverable condition")
                                 else:
                                     add_log(f"Verification failed for case {recovery_case.id}: {verification_result.get('error')}")
                                     recovery_action.status = RecoveryActionStatus.DENIED
                             else:
                                 add_log(f"Execution failed for case {recovery_case.id}: {execution_result.get('error')}")
                                 recovery_action.status = RecoveryActionStatus.DENIED
-                                results["policy_denied_actions"] += 1  # Count execution failures as policy issues for simplicity
+                                results["policy_denied_actions"] += 1
                         else:
-                            # Action denied by policy
                             results["policy_denied_actions"] += 1
                             add_log(f"Action {best_action_type.value} denied by policy for case {recovery_case.id}: {policy_result['denied_reason']}")
 
-                            # Record the policy denial in the timeline
                             from ..services.timeline import get_timeline_service
                             timeline_service = get_timeline_service()
                             timeline_service.add_event_to_timeline(
@@ -372,28 +394,26 @@ async def run_batch_simulation(
                                 action="policy_denial",
                                 input_data={
                                     "action_type": best_action_type.value,
-                                    "reason": temp_action.reason
+                                    "reason": action_reason
                                 },
                                 decision_data={
                                     "denied": True,
                                     "denied_reason": policy_result["denied_reason"],
                                     "rule_violations": policy_result["rule_violations"]
-                                }
+                                },
+                                db=db
                             )
 
                     except ValueError as e:
                         add_log(f"Invalid action type {best_action_type_str}: {str(e)}")
+                        results["failed_cases"] += 1
                         continue
 
-                results["total_injected"] += 1
-
-                # Commit every 10 cases to avoid large transactions
-                if (i + 1) % 10 == 0:
-                    db.commit()
-                    add_log(f"Processed {i + 1}/{total_cases} cases")
+                db.commit()
 
             except Exception as e:
                 db.rollback()
+                results["failed_cases"] += 1
                 add_log(f"Error processing case {i}: {str(e)}")
                 logger.error(f"Error in batch simulation case {i}: {str(e)}", exc_info=True)
                 continue

@@ -44,7 +44,8 @@ class BoundedExecutorService:
         self,
         case_id: int,
         action: RecoveryAction,
-        execution_mode: str = "simulation"
+        execution_mode: str = "simulation",
+        db: Optional[Session] = None
     ) -> Dict[str, Any]:
         """
         Execute an approved, typed recovery action.
@@ -68,7 +69,10 @@ class BoundedExecutorService:
         action_type_str = action_enum.value
         logger.info(f"BoundedExecutor executing {action_type_str} for case #{case_id} [mode={execution_mode}]")
 
-        db = SessionLocal()
+        should_close = False
+        if db is None:
+            db = SessionLocal()
+            should_close = True
         try:
             recovery_case = db.query(RecoveryCase).filter(RecoveryCase.id == case_id).first()
             if not recovery_case:
@@ -202,7 +206,8 @@ class BoundedExecutorService:
                 "error": str(e),
             }
         finally:
-            db.close()
+            if should_close:
+                db.close()
 
     def _generate_payment_link_razorpay(self, payment: Payment, customer: Customer, merchant: Merchant, res: Dict) -> Dict:
         """Call real Razorpay test-mode Payment Links API if credentials configured."""

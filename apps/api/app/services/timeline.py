@@ -41,8 +41,11 @@ class TimelineService:
             )
 
             db.add(timeline_event)
-            db.commit()
-            db.refresh(timeline_event)
+            if should_close:
+                db.commit()
+                db.refresh(timeline_event)
+            else:
+                db.flush()
 
             return timeline_event
 

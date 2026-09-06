@@ -27,20 +27,24 @@ class RecoveryPredictionService:
         from ml.models.recovery_predictor import get_recovery_predictor
         self.predictor = get_recovery_predictor()
 
-    def predict_recovery(self, case_id: int, prediction_mode: str = "ml_model") -> Dict[str, Any]:
+    def predict_recovery(self, case_id: int, prediction_mode: str = "ml_model", db: Optional[Session] = None) -> Dict[str, Any]:
         """
         Predict recovery probability for different actions.
 
         Args:
             case_id: ID of the recovery case
             prediction_mode: Either "heuristic" or "ml_model"
+            db: Optional database session
 
         Returns:
             dict: Prediction results for each action type with probabilities
         """
         logger.info(f"Predicting recovery for case {case_id} in {prediction_mode} mode")
 
-        db = SessionLocal()
+        should_close = False
+        if db is None:
+            db = SessionLocal()
+            should_close = True
         try:
             # Get the recovery case
             recovery_case = db.query(RecoveryCase).filter(
@@ -92,12 +96,10 @@ class RecoveryPredictionService:
 
             # Save predictions to database
             if prediction_result["success"]:
-                # Clear existing predictions for this case (optional, could keep history)
                 db.query(RecoveryPrediction).filter(
                     RecoveryPrediction.case_id == case_id
                 ).delete()
 
-                # Save new predictions
                 for action_type, pred_data in prediction_result["predictions"].items():
                     recovery_prediction = RecoveryPrediction(
                         case_id=case_id,
@@ -107,7 +109,6 @@ class RecoveryPredictionService:
                     )
                     db.add(recovery_prediction)
 
-                # Update the recovery case with the best prediction
                 best_action = max(
                     prediction_result["predictions"].items(),
                     key=lambda x: x[1]["probability"]
@@ -117,7 +118,6 @@ class RecoveryPredictionService:
                 recovery_case.expected_recovery = Decimal(str(round(float(recovery_case.amount) * best_prob, 2)))
                 recovery_case.updated_at = datetime.utcnow()
 
-                # Record the prediction in the timeline
                 timeline_service = get_timeline_service()
                 timeline_service.add_event_to_timeline(
                     case_id=case_id,
@@ -134,7 +134,6 @@ class RecoveryPredictionService:
                     db=db
                 )
 
-                # Create audit log for prediction
                 audit_log = AuditLog(
                     case_id=case_id,
                     actor="prediction_service",
@@ -150,12 +149,16 @@ class RecoveryPredictionService:
                 )
                 db.add(audit_log)
 
-                db.commit()
+                if should_close:
+                    db.commit()
+                else:
+                    db.flush()
 
             return prediction_result
 
         except Exception as e:
-            db.rollback()
+            if should_close:
+                db.rollback()
             logger.error(f"Error predicting recovery for case {case_id}: {str(e)}")
             return {
                 "success": False,
@@ -166,7 +169,8 @@ class RecoveryPredictionService:
                 "error": str(e)
             }
         finally:
-            db.close()
+            if should_close:
+                db.close()
 
     def _predict_with_heuristics(self, payment: Payment, customer: Customer,
                                merchant: Merchant, failure_diagnosis: Optional[FailureDiagnosis],
@@ -275,8 +279,8 @@ class RecoveryPredictionService:
 
             # Calculate confidence (simplified)
             confidence = 0.7  # Base confidence for heuristics
-            if failure_diagnosis:
-                confidence = (confidence + failure_diagnosis.confidence) / 2
+            if failure_diagnosis and failure_diagnosis.confidence:
+                confidence = (confidence + float(failure_diagnosis.confidence)) / 2
 
             predictions[action] = {
                 "probability": round(prob, 3),

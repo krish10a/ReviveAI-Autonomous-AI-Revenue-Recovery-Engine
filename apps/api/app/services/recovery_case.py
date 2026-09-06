@@ -2,6 +2,7 @@
 Recovery case service for managing recovery cases
 """
 import logging
+from typing import Optional
 from sqlalchemy.orm import Session
 from ..models.recovery_case import RecoveryCase, RecoveryCaseStatus
 from ..models.payment import Payment
@@ -10,11 +11,14 @@ from ..database import SessionLocal
 logger = logging.getLogger(__name__)
 
 class RecoveryCaseService:
-    def create_recovery_case_from_payment(self, payment_id: int) -> RecoveryCase:
+    def create_recovery_case_from_payment(self, payment_id: int, db: Optional[Session] = None) -> RecoveryCase:
         """
         Create a recovery case from a failed payment
         """
-        db = SessionLocal()
+        should_close = False
+        if db is None:
+            db = SessionLocal()
+            should_close = True
         try:
             # Get the payment
             payment = db.query(Payment).filter(Payment.id == payment_id).first()
@@ -32,6 +36,8 @@ class RecoveryCaseService:
 
             # Create new recovery case
             recovery_case = RecoveryCase(
+                merchant_id=payment.merchant_id,
+                customer_id=payment.customer_id,
                 payment_id=payment_id,
                 amount=payment.amount,
                 currency=payment.currency,
@@ -39,18 +45,23 @@ class RecoveryCaseService:
             )
 
             db.add(recovery_case)
-            db.commit()
-            db.refresh(recovery_case)
+            if should_close:
+                db.commit()
+                db.refresh(recovery_case)
+            else:
+                db.flush()
 
             logger.info(f"Created recovery case {recovery_case.id} for payment {payment_id}")
             return recovery_case
 
         except Exception as e:
-            db.rollback()
+            if should_close:
+                db.rollback()
             logger.error(f"Error creating recovery case: {str(e)}")
             raise
         finally:
-            db.close()
+            if should_close:
+                db.close()
 
     def get_recovery_case(self, case_id: int) -> RecoveryCase:
         """

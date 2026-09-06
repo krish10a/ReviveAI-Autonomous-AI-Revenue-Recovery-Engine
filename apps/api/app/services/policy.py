@@ -59,6 +59,7 @@ class PolicyEngineService:
         action: RecoveryAction,
         merchant: Merchant,
         eval_time: Optional[datetime] = None,
+        db: Optional[Session] = None,
     ) -> Dict[str, Any]:
         """
         Evaluate proposed recovery action against exhaustive business guardrails.
@@ -67,7 +68,10 @@ class PolicyEngineService:
         action_type_str = action.action_type.value if hasattr(action.action_type, 'value') else str(action.action_type).lower()
         logger.info(f"PolicyEngine evaluating action '{action_type_str}' for case #{case_id}")
 
-        db = SessionLocal()
+        should_close = False
+        if db is None:
+            db = SessionLocal()
+            should_close = True
         try:
             recovery_case = db.query(RecoveryCase).filter(RecoveryCase.id == case_id).first()
             if not recovery_case:
@@ -122,7 +126,6 @@ class PolicyEngineService:
             # Guardrail 6: Bank Outage & Degradation Detection
             if action_type_str in retry_actions:
                 bank_health = self.check_bank_health(db, payment.bank)
-                # Also treat explicit outage error codes as degraded
                 has_outage_code = payment.error_code in ["BANK_GATEWAY_TIMEOUT", "05", "BANK_OUTAGE"]
                 if bank_health["status"] == "DEGRADED" or has_outage_code:
                     rule_violations.append("bank_outage_detected")
@@ -151,12 +154,10 @@ class PolicyEngineService:
             allowed = len(rule_violations) == 0
             primary_reason = denial_reasons[0] if denial_reasons else "All policy guardrails verified"
 
-            # Ensure action is persisted/flushed so action.id is populated
             if not hasattr(action, "id") or not action.id:
                 db.add(action)
                 db.flush()
 
-            # Persist Audit-Proof Policy Decision Record
             policy_decision = PolicyDecision(
                 case_id=case_id,
                 action_id=action.id,
@@ -165,9 +166,11 @@ class PolicyEngineService:
                 reason=primary_reason,
             )
             db.add(policy_decision)
-            db.commit()
+            if should_close:
+                db.commit()
+            else:
+                db.flush()
 
-            # Recommend mandatory fallback if blocked
             fallback_action = "wait" if "bank_outage_detected" in rule_violations else ("stop" if "already_captured" in rule_violations or "customer_opt_out" in rule_violations else "escalate")
 
             return {
@@ -179,11 +182,13 @@ class PolicyEngineService:
             }
 
         except Exception as e:
-            db.rollback()
+            if should_close:
+                db.rollback()
             logger.error(f"Policy evaluation error for case #{case_id}: {str(e)}", exc_info=True)
             raise
         finally:
-            db.close()
+            if should_close:
+                db.close()
 
 
 policy_engine_service = PolicyEngineService()

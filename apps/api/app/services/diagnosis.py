@@ -2,6 +2,7 @@
 Failure diagnosis service for determining why payments failed.
 """
 import logging
+from decimal import Decimal
 from typing import Dict, Any, Optional
 from datetime import datetime
 import uuid
@@ -17,20 +18,24 @@ from ..services.timeline import get_timeline_service
 logger = logging.getLogger(__name__)
 
 class FailureDiagnosisService:
-    def diagnose_failure(self, case_id: int, diagnosis_mode: str = "rule_based") -> Dict[str, Any]:
+    def diagnose_failure(self, case_id: int, diagnosis_mode: str = "rule_based", db: Optional[Session] = None) -> Dict[str, Any]:
         """
         Diagnose why a payment failed.
 
         Args:
             case_id: ID of the recovery case
             diagnosis_mode: Either "rule_based" or "llm_fallback"
+            db: Optional database session
 
         Returns:
             dict: Diagnosis results including failure category and confidence
         """
         logger.info(f"Diagnosing failure for case {case_id} in {diagnosis_mode} mode")
 
-        db = SessionLocal()
+        should_close = False
+        if db is None:
+            db = SessionLocal()
+            should_close = True
         try:
             # Get the recovery case
             recovery_case = db.query(RecoveryCase).filter(
@@ -61,42 +66,33 @@ class FailureDiagnosisService:
 
             # Diagnose based on mode
             if diagnosis_mode == "llm_fallback":
-                # In a real implementation, we would call Claude API here
-                # For now, we'll fall back to rule-based if LLM is not available
                 diagnosis_result = self._diagnose_with_rules(payment, recovery_case, diagnosis_result)
                 diagnosis_result["diagnosis_mode"] = "rule_based (LLM fallback not implemented)"
             else:
-                # Rule-based diagnosis
                 diagnosis_result = self._diagnose_with_rules(payment, recovery_case, diagnosis_result)
 
             # If diagnosis was successful, save it to the database
             if diagnosis_result["success"]:
-                # Check if diagnosis already exists
                 existing_diagnosis = db.query(FailureDiagnosis).filter(
                     FailureDiagnosis.case_id == case_id
                 ).first()
 
                 if existing_diagnosis:
-                    # Update existing diagnosis
-                    existing_diagnosis.failure_category = diagnosis_result["failure_category"]
-                    existing_diagnosis.confidence = diagnosis_result["confidence"]
-                    existing_diagnosis.details = str(diagnosis_result["details"])
-                    existing_diagnosis.updated_at = datetime.utcnow()
+                    existing_diagnosis.category = diagnosis_result["failure_category"]
+                    existing_diagnosis.confidence = Decimal(str(round(diagnosis_result["confidence"], 2)))
+                    existing_diagnosis.source = "rule"
                 else:
-                    # Create new diagnosis
                     failure_diagnosis = FailureDiagnosis(
                         case_id=case_id,
-                        failure_category=diagnosis_result["failure_category"],
-                        confidence=diagnosis_result["confidence"],
-                        details=str(diagnosis_result["details"])
+                        category=diagnosis_result["failure_category"],
+                        confidence=Decimal(str(round(diagnosis_result["confidence"], 2))),
+                        source="rule"
                     )
                     db.add(failure_diagnosis)
 
-                # Update the recovery case
                 recovery_case.failure_category = diagnosis_result["failure_category"]
                 recovery_case.updated_at = datetime.utcnow()
 
-                # Record the diagnosis in the timeline
                 timeline_service = get_timeline_service()
                 timeline_service.add_event_to_timeline(
                     case_id=case_id,
@@ -113,7 +109,6 @@ class FailureDiagnosisService:
                     db=db
                 )
 
-                # Create audit log for diagnosis
                 audit_log = AuditLog(
                     case_id=case_id,
                     actor="diagnosis_service",
@@ -131,12 +126,16 @@ class FailureDiagnosisService:
                 )
                 db.add(audit_log)
 
-                db.commit()
+                if should_close:
+                    db.commit()
+                else:
+                    db.flush()
 
             return diagnosis_result
 
         except Exception as e:
-            db.rollback()
+            if should_close:
+                db.rollback()
             logger.error(f"Error diagnosing failure for case {case_id}: {str(e)}")
             return {
                 "success": False,
@@ -148,55 +147,44 @@ class FailureDiagnosisService:
                 "error": str(e)
             }
         finally:
-            db.close()
+            if should_close:
+                db.close()
 
     def _diagnose_with_rules(self, payment: Payment, recovery_case: RecoveryCase,
                            diagnosis_result: Dict) -> Dict:
         """Diagnose failure using rule-based approach."""
-        # In a real implementation, we would have more detailed failure data from Razorpay
-        # For now, we'll use the failure_code from the payment or simulate based on amount/time
+        # Try to get error code from payment
+        failure_code = getattr(payment, 'error_code', None) or getattr(payment, 'failure_code', None)
+        failure_reason = getattr(payment, 'error_description', None) or getattr(payment, 'failure_reason', None)
 
-        # Try to get failure code from payment metadata or gateway response
-        failure_code = getattr(payment, 'failure_code', None)
-        failure_reason = getattr(payment, 'failure_reason', None)
-
-        # Map common failure codes to categories
         failure_category = None
-        confidence = 0.8  # Default confidence for rule-based
+        confidence = 0.8
 
         if failure_code:
-            # Common Razorpay failure codes (simplified mapping)
-            if failure_code in ['invalid_card_number', 'card_number_incorrect']:
-                failure_category = "invalid_card_number"
-                confidence = 0.95
-            elif failure_code in ['expired_card', 'card_expired']:
+            code_clean = str(failure_code).lower().replace("fail_", "")
+            if "insufficient" in code_clean:
+                failure_category = "insufficient_funds"
+                confidence = 0.90
+            elif "expired" in code_clean:
                 failure_category = "expired_card"
                 confidence = 0.95
-            elif failure_code in ['insufficient_funds', 'insufficient_balance']:
-                failure_category = "insufficient_funds"
-                confidence = 0.9
-            elif failure_code in ['transaction_not_allowed', 'transaction_not_permitted']:
-                failure_category = "transaction_not_allowed"
-                confidence = 0.85
-            elif failure_code in ['authentication_failed', 'otp_failed', '3ds_failed']:
+            elif "auth" in code_clean:
                 failure_category = "authentication_failed"
-                confidence = 0.9
-            elif failure_code in ['technical_error', 'gateway_error', 'network_error']:
+                confidence = 0.90
+            elif "technical" in code_clean or "gateway" in code_clean:
                 failure_category = "technical_error"
-                confidence = 0.8
-            elif failure_code in ['bank_declined', 'issuer_declined']:
+                confidence = 0.80
+            elif "bank" in code_clean or "declined" in code_clean:
                 failure_category = "bank_declined"
                 confidence = 0.85
+            elif "not_allowed" in code_clean:
+                failure_category = "transaction_not_allowed"
+                confidence = 0.85
             else:
-                # Unknown failure code
-                failure_category = "unknown"
-                confidence = 0.5
+                failure_category = code_clean
+                confidence = 0.75
         else:
-            # If we don't have a specific failure code, infer from other factors
-            # This is a simplified simulation
             import random
-
-            # Simulate different failure categories based on payment characteristics
             rand_val = random.random()
 
             if rand_val < 0.2:

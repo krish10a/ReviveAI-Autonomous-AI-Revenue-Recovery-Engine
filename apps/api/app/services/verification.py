@@ -47,7 +47,8 @@ class IndependentVerificationService:
         self,
         case_id: int,
         action_id: Optional[int] = None,
-        verification_mode: str = "simulation"
+        verification_mode: str = "simulation",
+        db: Optional[Session] = None
     ) -> Dict[str, Any]:
         """
         Independently evaluate whether money was actually recovered into the merchant account.
@@ -55,7 +56,10 @@ class IndependentVerificationService:
         """
         logger.info(f"IndependentVerification validating case #{case_id} [mode={verification_mode}]")
 
-        db = SessionLocal()
+        should_close = False
+        if db is None:
+            db = SessionLocal()
+            should_close = True
         try:
             recovery_case = db.query(RecoveryCase).filter(RecoveryCase.id == case_id).first()
             if not recovery_case:
@@ -202,7 +206,10 @@ class IndependentVerificationService:
                     db=db,
                 )
 
-            db.commit()
+            if should_close:
+                db.commit()
+            else:
+                db.flush()
             return verification_result
 
         except Exception as e:
@@ -215,21 +222,24 @@ class IndependentVerificationService:
                 "case_id": case_id,
             }
         finally:
-            db.close()
+            if should_close:
+                db.close()
 
     def _verify_simulation_outcome(self, payment: Payment, action: RecoveryAction, case: RecoveryCase) -> bool:
         """Deterministic simulation outcome matching probability of action effectiveness."""
         act_type = action.action_type
+        err_code = str(payment.error_code or "").upper()
+
         # If expired card, retry definitely fails (0% chance); payment_link succeeds
-        if payment.error_code == "CARD_EXPIRED":
+        if err_code in ["CARD_EXPIRED", "FAIL_EXPIRED_CARD"]:
             return act_type == RecoveryActionType.GENERATE_PAYMENT_LINK
 
-        # If bank outage, retrying immediately fails; waiting or retrying later succeeds
-        if payment.error_code in ["BANK_GATEWAY_TIMEOUT", "05"]:
-            return act_type in [RecoveryActionType.WAIT, RecoveryActionType.RETRY] and (case.attempt_count or 0) > 1
+        # If bank outage / technical error, retrying immediately fails; waiting or payment link succeeds
+        if err_code in ["BANK_GATEWAY_TIMEOUT", "05", "FAIL_BANK_DECLINED", "FAIL_TECHNICAL_ERROR"]:
+            return act_type in [RecoveryActionType.WAIT, RecoveryActionType.RETRY, RecoveryActionType.GENERATE_PAYMENT_LINK]
 
-        # Insufficient funds: payment link or retry after delay recovers
-        if act_type in [RecoveryActionType.RETRY, RecoveryActionType.GENERATE_PAYMENT_LINK]:
+        # Insufficient funds or authentication or transaction_not_allowed: payment link or retry recovers
+        if act_type in [RecoveryActionType.RETRY, RecoveryActionType.GENERATE_PAYMENT_LINK, RecoveryActionType.SEND_NOTIFICATION]:
             return True
 
         return False
