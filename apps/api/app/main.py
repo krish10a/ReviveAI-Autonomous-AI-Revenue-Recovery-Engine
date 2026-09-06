@@ -140,18 +140,21 @@ def health_db():
     try:
         with engine.connect() as conn:
             conn.execute(text("SELECT 1;"))
-        return {"status": "healthy", "service": "database", "engine": engine.name}
-    except Exception as e:
-        return {"status": "unhealthy", "service": "database", "error": str(e)}
+        return {"status": "healthy", "service": "database"}
+    except Exception:
+        return {"status": "unhealthy", "service": "database"}
 
 
 @app.get("/health/redis")
 def health_redis():
+    if os.getenv("REDIS_ENABLED", "false").lower() != "true":
+        return {"status": "disabled", "service": "redis"}
+    
     redis_host = os.getenv("REDIS_HOST", "localhost")
     redis_port = int(os.getenv("REDIS_PORT", 6379))
     try:
         r = redis.Redis(host=redis_host, port=redis_port, socket_timeout=2.0)
         r.ping()
-        return {"status": "healthy", "service": "redis", "host": redis_host, "port": redis_port}
-    except Exception as e:
-        return {"status": "unhealthy", "service": "redis", "error": str(e)}
+        return {"status": "healthy", "service": "redis"}
+    except Exception:
+        return {"status": "unhealthy", "service": "redis"}

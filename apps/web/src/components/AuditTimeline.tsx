@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Card, CardContent } from "@/components/ui/card";
+
 import { Badge } from "@/components/ui/badge";
 import { Clock, ShieldAlert, CheckCircle2, ArrowRight } from "lucide-react";
 
@@ -61,7 +61,14 @@ export default function AuditTimeline({ caseId }: AuditTimelineProps) {
   return (
     <div className="relative pl-6 space-y-4 before:absolute before:left-2.5 before:top-2 before:bottom-2 before:w-0.5 before:bg-slate-200 dark:before:bg-slate-800">
       {events.map((evt) => {
-        let decObj: any = null;
+        interface DecisionObj {
+          result?: string;
+          denied?: boolean;
+          reason?: string;
+          rule_violations?: string[];
+          raw?: string | null;
+        }
+        let decObj: DecisionObj | null = null;
         try {
           if (evt.decision_json) {
             decObj = typeof evt.decision_json === "string" ? JSON.parse(evt.decision_json) : evt.decision_json;

@@ -49,14 +49,18 @@ async def handle_razorpay_webhook(
     if not raw_body:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Empty webhook payload")
 
-    # 2. Signature Verification
-    webhook_secret = os.getenv("RAZORPAY_WEBHOOK_SECRET", "demo_webhook_secret")
+    webhook_secret = os.getenv("RAZORPAY_WEBHOOK_SECRET")
+    if not webhook_secret:
+        logger.error("RAZORPAY_WEBHOOK_SECRET is not set in environment.")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Webhook configuration error")
 
-    # If x_razorpay_signature is provided, enforce strict HMAC SHA256 check
-    if x_razorpay_signature:
-        if not verify_razorpay_signature(raw_body, x_razorpay_signature, webhook_secret):
-            logger.warning("Rejected webhook due to invalid HMAC signature")
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid signature")
+    if not x_razorpay_signature:
+        logger.warning("Rejected webhook due to missing HMAC signature")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing signature")
+
+    if not verify_razorpay_signature(raw_body, x_razorpay_signature, webhook_secret):
+        logger.warning("Rejected webhook due to invalid HMAC signature")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid signature")
 
     # 3. Parse JSON
     try:

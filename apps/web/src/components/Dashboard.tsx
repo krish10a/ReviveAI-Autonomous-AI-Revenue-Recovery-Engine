@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import AuditTimeline from "@/components/AuditTimeline";
 import DecisionExplainer from "@/components/DecisionExplainer";
-import { ShieldCheck, Zap, AlertTriangle, Clock, Users, ArrowUpRight, BarChart3, RefreshCw } from "lucide-react";
+import { ShieldCheck, Zap, Clock, BarChart3, RefreshCw } from "lucide-react";
 
 interface OverviewMetrics {
   revenue_at_risk: number;
@@ -116,26 +116,17 @@ const BENCHMARK_SCENARIOS = [
 
 export default function Dashboard() {
   const [metrics, setMetrics] = useState<OverviewMetrics | null>(null);
-  const [failureBreakdown, setFailureBreakdown] = useState<any[]>([]);
-  const [interventionStats, setInterventionStats] = useState<any[]>([]);
   const [experiment, setExperiment] = useState<ExperimentResults | null>(null);
   const [selectedScenario, setSelectedScenario] = useState(BENCHMARK_SCENARIOS[0]);
   const [loading, setLoading] = useState(true);
   const [simulating, setSimulating] = useState(false);
-  const [runningExperiment, setRunningExperiment] = useState(false);
+  const [runningExperiment, setRunningExperiment] = useState(true);
 
-  const fetchOverview = async () => {
+  const fetchOverview = async (isInitial = false) => {
     try {
-      setLoading(true);
-      const [resOverview, resFailures, resInterventions] = await Promise.all([
-        fetch("/api/analytics/overview"),
-        fetch("/api/analytics/failure-reason"),
-        fetch("/api/analytics/intervention-performance"),
-      ]);
-
+      if (!isInitial) setLoading(true);
+      const resOverview = await fetch("/api/analytics/overview");
       if (resOverview.ok) setMetrics(await resOverview.json());
-      if (resFailures.ok) setFailureBreakdown(await resFailures.json());
-      if (resInterventions.ok) setInterventionStats(await resInterventions.json());
     } catch (err) {
       console.error("Failed to load dashboard data:", err);
     } finally {
@@ -143,9 +134,9 @@ export default function Dashboard() {
     }
   };
 
-  const triggerExperiment = async () => {
+  const triggerExperiment = async (isInitial = false) => {
     try {
-      setRunningExperiment(true);
+      if (!isInitial) setRunningExperiment(true);
       const res = await fetch("/api/analytics/experiment", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -176,8 +167,11 @@ export default function Dashboard() {
   };
 
   useEffect(() => {
-    fetchOverview();
-    triggerExperiment();
+    const timer = setTimeout(() => {
+      fetchOverview(true);
+      triggerExperiment(true);
+    }, 0);
+    return () => clearTimeout(timer);
   }, []);
 
   return (
@@ -197,7 +191,7 @@ export default function Dashboard() {
         </div>
 
         <div className="flex items-center gap-3">
-          <Button variant="outline" size="sm" onClick={fetchOverview} disabled={loading}>
+          <Button variant="outline" size="sm" onClick={() => fetchOverview()} disabled={loading}>
             <RefreshCw className={`w-4 h-4 mr-2 ${loading ? "animate-spin" : ""}`} />
             Sync DB
           </Button>
@@ -277,7 +271,7 @@ export default function Dashboard() {
               Synthetic cohort (n=100) split 50/50: Naive Static Retry Strategy vs. ReviveAI Closed-Loop Pipeline.
             </CardDescription>
           </div>
-          <Button variant="outline" size="sm" onClick={triggerExperiment} disabled={runningExperiment}>
+          <Button variant="outline" size="sm" onClick={() => triggerExperiment()} disabled={runningExperiment}>
             {runningExperiment ? "Evaluating Cohort..." : "Re-run Experiment"}
           </Button>
         </CardHeader>

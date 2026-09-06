@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: revive-api
+    env: python
+    buildCommand: "pip install -r apps/api/requirements.txt"
+    startCommand: "PYTHONPATH=. uvicorn apps.api.app.main:app --host 0.0.0.0 --port $PORT"
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
+      - key: PORT
+        value: 8000
+      - key: DATABASE_URL
+        sync: false
+      - key: REDIS_ENABLED
+        value: "false"
+      - key: RAZORPAY_WEBHOOK_SECRET
+        sync: false
+      - key: FRONTEND_URL
+        sync: false
+    plan: free
