@@ -228,18 +228,25 @@ class IndependentVerificationService:
     def _verify_simulation_outcome(self, payment: Payment, action: RecoveryAction, case: RecoveryCase) -> bool:
         """Deterministic simulation outcome matching probability of action effectiveness."""
         act_type = action.action_type
+        if hasattr(act_type, "value"):
+            act_type = act_type.value
+        act_type_str = str(act_type).lower()
+
         err_code = str(payment.error_code or "").upper()
+
+        if act_type_str in ["escalate", "stop"]:
+            return False
 
         # If expired card, retry definitely fails (0% chance); payment_link succeeds
         if err_code in ["CARD_EXPIRED", "FAIL_EXPIRED_CARD"]:
-            return act_type == RecoveryActionType.GENERATE_PAYMENT_LINK
+            return act_type_str in ["generate_payment_link", "payment_link"]
 
         # If bank outage / technical error, retrying immediately fails; waiting or payment link succeeds
         if err_code in ["BANK_GATEWAY_TIMEOUT", "05", "FAIL_BANK_DECLINED", "FAIL_TECHNICAL_ERROR"]:
-            return act_type in [RecoveryActionType.WAIT, RecoveryActionType.RETRY, RecoveryActionType.GENERATE_PAYMENT_LINK]
+            return act_type_str in ["wait", "retry", "generate_payment_link", "payment_link"]
 
         # Insufficient funds or authentication or transaction_not_allowed: payment link or retry recovers
-        if act_type in [RecoveryActionType.RETRY, RecoveryActionType.GENERATE_PAYMENT_LINK, RecoveryActionType.SEND_NOTIFICATION]:
+        if act_type_str in ["retry", "generate_payment_link", "payment_link", "send_notification", "wait"]:
             return True
 
         return False

@@ -277,7 +277,7 @@ async def run_batch_simulation(
                 # 2. Prediction
                 prediction_result = prediction_service.predict_recovery(
                     case_id=recovery_case.id,
-                    prediction_mode="heuristic",
+                    prediction_mode="ml_model",
                     db=db
                 )
 

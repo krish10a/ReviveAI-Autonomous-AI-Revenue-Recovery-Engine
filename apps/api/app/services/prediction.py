@@ -179,106 +179,72 @@ class RecoveryPredictionService:
         # Define the actions we can take
         actions = ["wait", "send_notification", "generate_payment_link", "retry", "escalate", "stop"]
 
-        # Base recovery probability (would be calibrated from historical data)
-        base_probability = 0.25  # 25% base recovery rate
+        # Base recovery probability per action type
+        base_probabilities = {
+            "generate_payment_link": 0.75,
+            "retry": 0.55,
+            "wait": 0.50,
+            "send_notification": 0.40,
+            "escalate": 0.15,
+            "stop": 0.05
+        }
 
         predictions = {}
 
         for action in actions:
-            # Start with base probability
-            prob = base_probability
+            prob = base_probabilities.get(action, 0.25)
 
             # Adjust based on failure category
             if failure_diagnosis:
                 failure_category = failure_diagnosis.category
-                confidence = failure_diagnosis.confidence or 0.8
 
-                # Adjust probability based on failure type
                 if action == "retry":
                     if failure_category == "insufficient_funds":
-                        prob *= 0.3  # Low chance if funds insufficient (need time)
-                    elif failure_category == "expired_card":
-                        prob *= 0.0  # Zero chance if card expired
+                        prob *= 0.7
+                    elif failure_category in ["expired_card", "FAIL_EXPIRED_CARD"]:
+                        prob = 0.0
                     elif failure_category == "authentication_failed":
-                        prob *= 0.4  # Low chance if auth failed
-                    elif failure_category == "technical_error":
-                        prob *= 0.7  # Medium chance if technical error
-                    elif failure_category == "bank_declined":
-                        prob *= 0.5  # Medium-low chance if bank declined
-                    else:
-                        prob *= 0.6  # Default adjustment
-
+                        prob *= 0.5
+                    elif failure_category in ["technical_error", "bank_declined"]:
+                        prob *= 0.8
                 elif action == "generate_payment_link":
-                    if failure_category == "insufficient_funds":
-                        prob *= 0.6  # Medium chance with payment link
-                    elif failure_category == "expired_card":
-                        prob *= 0.0  # Zero chance if card expired
-                    elif failure_category == "authentication_failed":
-                        prob *= 0.5  # Medium chance if auth failed (customer can retry)
-                    elif failure_category == "technical_error":
-                        prob *= 0.8  # Good chance if technical error
-                    elif failure_category == "bank_declined":
-                        prob *= 0.4  # Medium-low chance if bank declined
-                    else:
-                        prob *= 0.5  # Default adjustment
-
-                elif action == "send_notification":
-                    # Notification alone has low direct recovery but might prompt customer action
-                    prob *= 0.2  # Low probability
-
+                    if failure_category in ["expired_card", "FAIL_EXPIRED_CARD"]:
+                        prob = 0.85
+                    elif failure_category in ["insufficient_funds", "authentication_failed"]:
+                        prob = 0.75
+                    elif failure_category in ["technical_error", "bank_declined"]:
+                        prob = 0.80
                 elif action == "wait":
-                    if failure_category == "insufficient_funds":
-                        prob *= 0.8  # Good chance if waiting for funds
-                    elif failure_category == "expired_card":
-                        prob *= 0.0  # Zero chance if card expired
-                    elif failure_category == "authentication_failed":
-                        prob *= 0.3  # Medium chance if waiting for customer to retry
-                    elif failure_category == "technical_error":
-                        prob *= 0.6  # Medium chance if waiting for technical issue to resolve
-                    elif failure_category == "bank_declined":
-                        prob *= 0.5  # Medium chance if waiting
-                    else:
-                        prob *= 0.5  # Default adjustment
+                    if failure_category in ["bank_declined", "technical_error"]:
+                        prob = 0.70
+                    elif failure_category in ["expired_card", "FAIL_EXPIRED_CARD"]:
+                        prob = 0.0
+                elif action == "escalate":
+                    prob = 0.15
+                elif action == "stop":
+                    prob = 0.05
 
-            # Adjust based on amount (higher amount = lower recovery probability generally)
+            # Adjust based on amount
             amount_factor = 1.0
-            if payment.amount > 10000:  # High value
-                amount_factor = 0.7
-            elif payment.amount > 5000:  # Medium-high value
-                amount_factor = 0.8
-            elif payment.amount > 1000:  # Medium value
-                amount_factor = 0.9
-            # Low amount gets full factor
+            if payment.amount > 10000:
+                amount_factor = 0.85
+            elif payment.amount > 5000:
+                amount_factor = 0.90
 
-            prob *= amount_factor
+            if action != "escalate":
+                prob *= amount_factor
 
             # Adjust based on customer history
             history_factor = 1.0
             if customer.previous_recoveries > 0:
-                # Customer has recovered before - good sign
-                history_factor = 1.2
+                history_factor = 1.1
             elif customer.previous_failed_payments > customer.previous_successful_payments:
-                # Customer has more failures than successes - bad sign
-                history_factor = 0.8
+                history_factor = 0.9
 
             prob *= history_factor
-
-            # Adjust based on merchant settings
-            merchant_factor = 1.0
-            if hasattr(merchant, 'max_automated_amount') and payment.amount > merchant.max_automated_amount:
-                # Amount exceeds merchant's automated limit
-                if action in ["retry", "generate_payment_link", "send_notification"]:
-                    merchant_factor = 0.5  # Lower chance for automated actions
-                elif action == "escalate":
-                    merchant_factor = 1.5  # Higher chance for escalation
-
-            prob *= merchant_factor
-
-            # Ensure probability is in valid range
             prob = max(0.0, min(1.0, prob))
 
-            # Calculate confidence (simplified)
-            confidence = 0.7  # Base confidence for heuristics
+            confidence = 0.7
             if failure_diagnosis and failure_diagnosis.confidence:
                 confidence = (confidence + float(failure_diagnosis.confidence)) / 2
 
@@ -296,8 +262,8 @@ class RecoveryPredictionService:
         return prediction_result
 
     def _predict_with_ml_model(self, payment: Payment, customer: Customer,
-                              merchant: Merchant, failure_diagnosis: Optional[FailureDiagnosis],
-                              prediction_result: Dict) -> Dict:
+                               merchant: Merchant, failure_diagnosis: Optional[FailureDiagnosis],
+                               prediction_result: Dict) -> Dict:
         """Predict recovery using trained action-conditioned ML model."""
         context = {
             "amount": float(payment.amount),
@@ -327,7 +293,7 @@ class RecoveryPredictionService:
             "generate_payment_link": ml_probs.get("payment_link", {}).get("probability", 0.70),
             "send_notification": ml_probs.get("notification", {}).get("probability", 0.55),
             "wait": ml_probs.get("wait", {}).get("probability", 0.40),
-            "escalate": ml_probs.get("escalate", {}).get("probability", 0.80),
+            "escalate": ml_probs.get("escalate", {}).get("probability", 0.15),
             "stop": 0.05,
         }
 
